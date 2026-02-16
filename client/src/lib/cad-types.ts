@@ -11,7 +11,8 @@ export type ToolType =
   | "trim" | "extend" | "offset" | "fillet"
   | "copy" | "erase" | "pan" | "zoom"
   | "measure_distance" | "measure_area" | "measure_angle"
-  | "hatch" | "block_group" | "block_insert";
+  | "hatch" | "block_group" | "block_insert"
+  | "array_rect" | "array_polar";
 
 export type HatchPattern = "solid" | "crosshatch" | "diagonal" | "dots" | "horizontal" | "vertical" | "brick";
 

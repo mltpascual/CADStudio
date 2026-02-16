@@ -12,6 +12,7 @@ import { mirrorEntities } from "@/lib/mirror-utils";
 import { measureDistance, measureArea, measureAngle, drawDistanceOverlay, drawAreaOverlay, drawAngleOverlay, type MeasureResult } from "@/lib/measure-utils";
 import { getEntityBoundary, createHatchEntity, drawHatchPattern } from "@/lib/hatch-utils";
 import { createBlockDefinition, createBlockRefEntity, getBlockRefEntities, explodeBlockRef } from "@/lib/block-utils";
+import { createRectangularArray, createPolarArray, getEntitiesCentroid } from "@/lib/array-utils";
 import type { BlockRefData } from "@/lib/cad-types";
 
 export default function CADCanvas() {
@@ -850,6 +851,58 @@ export default function CADCanvas() {
       return;
     }
 
+    if (tool === "array_rect") {
+      if (state.selectedEntityIds.length === 0) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "ARRAYRECT", timestamp: Date.now(), result: "Select entities first" } });
+        return;
+      }
+      const rowsStr = prompt("Number of rows (Y direction):", "3");
+      if (!rowsStr) return;
+      const colsStr = prompt("Number of columns (X direction):", "3");
+      if (!colsStr) return;
+      const rowSpStr = prompt("Row spacing (distance between rows):", "50");
+      if (!rowSpStr) return;
+      const colSpStr = prompt("Column spacing (distance between columns):", "50");
+      if (!colSpStr) return;
+      const rows = parseInt(rowsStr) || 3;
+      const cols = parseInt(colsStr) || 3;
+      const rowSp = parseFloat(rowSpStr) || 50;
+      const colSp = parseFloat(colSpStr) || 50;
+      const selected = state.entities.filter(e => state.selectedEntityIds.includes(e.id));
+      const newEntities = createRectangularArray(selected, { rows, columns: cols, rowSpacing: rowSp, colSpacing: colSp, angle: 0 });
+      if (newEntities.length > 0) {
+        pushUndo();
+        dispatch({ type: "ADD_ENTITIES", entities: newEntities });
+        dispatch({ type: "ADD_COMMAND", entry: { command: "ARRAYRECT", timestamp: Date.now(), result: `Created ${rows}x${cols} rectangular array (${newEntities.length} new entities)` } });
+      }
+      return;
+    }
+
+    if (tool === "array_polar") {
+      if (state.selectedEntityIds.length === 0) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "ARRAYPOLAR", timestamp: Date.now(), result: "Select entities first" } });
+        return;
+      }
+      const countStr = prompt("Total number of items (including original):", "6");
+      if (!countStr) return;
+      const angleStr = prompt("Total angle to fill (degrees, 360 = full circle):", "360");
+      if (!angleStr) return;
+      const rotateStr = prompt("Rotate items as they are arrayed? (y/n):", "y");
+      const count = parseInt(countStr) || 6;
+      const totalAngle = parseFloat(angleStr) || 360;
+      const rotateItems = rotateStr?.toLowerCase() !== "n";
+      const selected = state.entities.filter(e => state.selectedEntityIds.includes(e.id));
+      // Use clicked point as center, or centroid if not drawing
+      const center = pt;
+      const newEntities = createPolarArray(selected, { center, count, totalAngle, rotateItems });
+      if (newEntities.length > 0) {
+        pushUndo();
+        dispatch({ type: "ADD_ENTITIES", entities: newEntities });
+        dispatch({ type: "ADD_COMMAND", entry: { command: "ARRAYPOLAR", timestamp: Date.now(), result: `Created polar array: ${count} items over ${totalAngle}° (${newEntities.length} new entities)` } });
+      }
+      return;
+    }
+
     if (tool === "measure_angle") {
       measurePoints.current = [...measurePoints.current, pt];
       if (measurePoints.current.length === 1) {
@@ -959,6 +1012,8 @@ export default function CADCanvas() {
       if (e.key === "B" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "block_group" }); return; }
       if (e.key === "I" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "block_insert" }); return; }
       if (e.key === "M" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "mirror" }); return; }
+      if (e.key === "A" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "array_rect" }); return; }
+      if (e.key === "P" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "array_polar" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
@@ -998,6 +1053,8 @@ function getCursor(tool: string, panning: boolean): string {
     case "hatch": return "crosshair";
     case "block_group": return "crosshair";
     case "block_insert": return "crosshair";
+    case "array_rect": return "crosshair";
+    case "array_polar": return "crosshair";
     case "measure_distance": return "crosshair";
     case "measure_area": return "crosshair";
     case "measure_angle": return "crosshair";

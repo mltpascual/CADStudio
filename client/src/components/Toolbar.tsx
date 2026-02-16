@@ -2,7 +2,7 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import type { ToolType } from "@/lib/cad-types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend, FlipHorizontal2, RulerIcon, Triangle, Compass, PaintBucket, Group, PackagePlus } from "lucide-react";
+import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend, FlipHorizontal2, RulerIcon, Triangle, Compass, PaintBucket, Group, PackagePlus, Grid3X3, CircleDot } from "lucide-react";
 
 interface ToolItem { id: ToolType; label: string; shortcut: string; icon: React.ReactNode; }
 
@@ -34,6 +34,8 @@ const modifyTools: ToolItem[] = [
   { id: "rotate", label: "Rotate", shortcut: "Shift+R", icon: <RotateCw size={16} /> },
   { id: "scale", label: "Scale", shortcut: "Shift+S", icon: <Scaling size={16} /> },
   { id: "fillet", label: "Fillet/Chamfer", shortcut: "F", icon: <Blend size={16} /> },
+  { id: "array_rect", label: "Rectangular Array", shortcut: "Shift+A", icon: <Grid3X3 size={16} /> },
+  { id: "array_polar", label: "Polar Array", shortcut: "Shift+P", icon: <CircleDot size={16} /> },
   { id: "erase", label: "Erase", shortcut: "X", icon: <Eraser size={16} /> },
 ];
 const measureTools: ToolItem[] = [
