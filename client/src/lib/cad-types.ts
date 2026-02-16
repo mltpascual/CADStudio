@@ -12,7 +12,8 @@ export type ToolType =
   | "copy" | "erase" | "pan" | "zoom"
   | "measure_distance" | "measure_area" | "measure_angle"
   | "hatch" | "block_group" | "block_insert"
-  | "array_rect" | "array_polar";
+  | "array_rect" | "array_polar"
+  | "spline";
 
 export type HatchPattern = "solid" | "crosshatch" | "diagonal" | "dots" | "horizontal" | "vertical" | "brick";
 
@@ -27,12 +28,13 @@ export interface EllipseData { type: "ellipse"; center: Point; radiusX: number; 
 export interface TextData { type: "text"; position: Point; content: string; fontSize: number; rotation: number; }
 export interface DimensionData { type: "dimension"; start: Point; end: Point; offset: number; }
 export interface HatchData { type: "hatch"; boundary: Point[]; pattern: HatchPattern; patternScale: number; patternAngle: number; fillColor: string; fillOpacity: number; }
+export interface SplineData { type: "spline"; controlPoints: Point[]; degree: number; closed: boolean; }
 export interface BlockRefData { type: "blockref"; blockId: string; insertPoint: Point; scaleX: number; scaleY: number; rotation: number; }
 
 export type EntityData =
   | LineData | CircleData | ArcData | RectangleData
   | PolylineData | EllipseData | TextData | DimensionData
-  | HatchData | BlockRefData;
+  | HatchData | SplineData | BlockRefData;
 
 export interface CADEntity {
   id: string;

@@ -2,7 +2,8 @@
 // CAD Utils — Geometry, snapping, and export utilities
 // ============================================================
 
-import type { Point, CADEntity, SnapResult, SnapSettings, GridSettings } from "./cad-types";
+import type { Point, CADEntity, SnapSettings, GridSettings, SnapResult, SplineData } from "./cad-types";
+import { hitTestSpline, evaluateCatmullRom, getSplineEndpoints } from "./spline-utils";
 
 let _idCounter = 0;
 export function generateId(): string {
@@ -85,6 +86,7 @@ export function hitTestEntity(entity: CADEntity, point: Point, tolerance: number
       return point.x >= d.position.x && point.x <= d.position.x + w && point.y >= d.position.y - h && point.y <= d.position.y;
     }
     case "dimension": return distToSeg(point, d.start, d.end) < tolerance * 2;
+    case "spline": return hitTestSpline(d as SplineData, point, tolerance);
     default: return false;
   }
 }
@@ -161,6 +163,13 @@ function getSnapPoints(entity: CADEntity, snap: SnapSettings): SnapResult[] {
     case "dimension":
       if (snap.endpointSnap) { results.push({ point: d.start, type: "endpoint", entityId: id }); results.push({ point: d.end, type: "endpoint", entityId: id }); }
       break;
+    case "spline": {
+      const sd = d as SplineData;
+      const endpoints = getSplineEndpoints(sd);
+      if (snap.endpointSnap) endpoints.forEach(p => results.push({ point: p, type: "endpoint", entityId: id }));
+      if (snap.endpointSnap) sd.controlPoints.forEach(p => results.push({ point: p, type: "endpoint", entityId: id }));
+      break;
+    }
   }
   return results;
 }
@@ -194,6 +203,14 @@ function getBBox(entity: CADEntity) {
     case "text": return { minX: d.position.x, minY: d.position.y - d.fontSize, maxX: d.position.x + d.content.length * d.fontSize * 0.6, maxY: d.position.y };
     case "arc": return { minX: d.center.x - d.radius, minY: d.center.y - d.radius, maxX: d.center.x + d.radius, maxY: d.center.y + d.radius };
     case "dimension": return { minX: Math.min(d.start.x, d.end.x), minY: Math.min(d.start.y, d.end.y) - Math.abs(d.offset) - 20, maxX: Math.max(d.start.x, d.end.x), maxY: Math.max(d.start.y, d.end.y) };
+    case "spline": {
+      const sd = d as SplineData;
+      if (!sd.controlPoints.length) return null;
+      const pts = evaluateCatmullRom(sd.controlPoints, sd.closed, 60);
+      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+      pts.forEach(p => { mnX = Math.min(mnX, p.x); mnY = Math.min(mnY, p.y); mxX = Math.max(mxX, p.x); mxY = Math.max(mxY, p.y); });
+      return { minX: mnX, minY: mnY, maxX: mxX, maxY: mxY };
+    }
     default: return null;
   }
 }

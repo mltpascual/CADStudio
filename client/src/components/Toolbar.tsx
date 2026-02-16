@@ -2,7 +2,7 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import type { ToolType } from "@/lib/cad-types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend, FlipHorizontal2, RulerIcon, Triangle, Compass, PaintBucket, Group, PackagePlus, Grid3X3, CircleDot } from "lucide-react";
+import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend, FlipHorizontal2, RulerIcon, Triangle, Compass, PaintBucket, Group, PackagePlus, Grid3X3, CircleDot, Waves } from "lucide-react";
 
 interface ToolItem { id: ToolType; label: string; shortcut: string; icon: React.ReactNode; }
 
@@ -14,6 +14,7 @@ const drawTools: ToolItem[] = [
   { id: "rectangle", label: "Rectangle", shortcut: "R", icon: <Square size={16} /> },
   { id: "polyline", label: "Polyline", shortcut: "P", icon: <Spline size={16} /> },
   { id: "ellipse", label: "Ellipse", shortcut: "E", icon: <Maximize2 size={16} /> },
+  { id: "spline", label: "Spline/Curve", shortcut: "S", icon: <Waves size={16} /> },
 ];
 const annotateTools: ToolItem[] = [
   { id: "text", label: "Text", shortcut: "T", icon: <Type size={16} /> },

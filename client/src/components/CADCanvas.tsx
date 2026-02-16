@@ -13,7 +13,8 @@ import { measureDistance, measureArea, measureAngle, drawDistanceOverlay, drawAr
 import { getEntityBoundary, createHatchEntity, drawHatchPattern } from "@/lib/hatch-utils";
 import { createBlockDefinition, createBlockRefEntity, getBlockRefEntities, explodeBlockRef } from "@/lib/block-utils";
 import { createRectangularArray, createPolarArray, getEntitiesCentroid } from "@/lib/array-utils";
-import type { BlockRefData } from "@/lib/cad-types";
+import { drawSpline, drawSplinePreview, hitTestSpline, moveSpline } from "@/lib/spline-utils";
+import type { BlockRefData, SplineData } from "@/lib/cad-types";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,6 +35,7 @@ export default function CADCanvas() {
   const [measureResult, setMeasureResult] = useState<MeasureResult | null>(null);
   const hatchBoundaryPts = useRef<Point[]>([]);
   const blockInsertId = useRef<string | null>(null);
+  const splinePoints = useRef<Point[]>([]);
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => {
     const canvas = canvasRef.current;
@@ -202,6 +204,10 @@ export default function CADCanvas() {
         const mx = (s.x + e.x) / 2, my = (s.y + e.y) / 2;
         ctx.fillStyle = cadDimension; ctx.font = "11px 'Fira Code'"; ctx.textAlign = "center";
         ctx.fillText(dist.toFixed(2), mx, my - 8);
+      } else if (tool === "spline" && splinePoints.current.length > 0) {
+        ctx.restore();
+        drawSplinePreview(ctx, splinePoints.current, ds.previewPoint, false, state.activeColor, cx + panX, cy + panY, zoom);
+        ctx.save();
       }
       ctx.restore();
     }
@@ -463,6 +469,17 @@ export default function CADCanvas() {
         dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, currentPoints: [pt], previewPoint: pt } });
       } else {
         dispatch({ type: "SET_DRAWING_STATE", state: { currentPoints: [...state.drawingState.currentPoints, pt], previewPoint: pt } });
+      }
+      return;
+    }
+
+    if (tool === "spline") {
+      if (!state.drawingState.isDrawing) {
+        splinePoints.current = [pt];
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, currentPoints: [pt], previewPoint: pt } });
+      } else {
+        splinePoints.current = [...splinePoints.current, pt];
+        dispatch({ type: "SET_DRAWING_STATE", state: { currentPoints: splinePoints.current, previewPoint: pt } });
       }
       return;
     }
@@ -984,6 +1001,13 @@ export default function CADCanvas() {
       const ent = createEntity({ type: "polyline", points: state.drawingState.currentPoints, closed: false });
       dispatch({ type: "ADD_ENTITY", entity: ent });
       dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, currentPoints: [], previewPoint: null } });
+    } else if (state.activeTool === "spline" && state.drawingState.isDrawing && splinePoints.current.length >= 2) {
+      pushUndo();
+      const ent = createEntity({ type: "spline", controlPoints: [...splinePoints.current], degree: 3, closed: false });
+      dispatch({ type: "ADD_ENTITY", entity: ent });
+      dispatch({ type: "ADD_COMMAND", entry: { command: "SPLINE", timestamp: Date.now(), result: `Created spline with ${splinePoints.current.length} control points` } });
+      splinePoints.current = [];
+      dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, currentPoints: [], previewPoint: null } });
     } else if (state.drawingState.isDrawing) {
       dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, currentPoints: [], previewPoint: null } });
     }
@@ -999,7 +1023,7 @@ export default function CADCanvas() {
         if (e.key === "a") { e.preventDefault(); dispatch({ type: "SELECT_ENTITIES", ids: state.entities.filter(en => en.visible && !en.locked).map(en => en.id) }); return; }
         if (e.key === "s") { e.preventDefault(); return; }
       }
-      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); hatchBoundaryPts.current = []; blockInsertId.current = null; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
+      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); hatchBoundaryPts.current = []; blockInsertId.current = null; splinePoints.current = []; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
       if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedEntityIds.length) { pushUndo(); dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds }); } return; }
       if (e.key === "T" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "trim" }); return; }
       if (e.key === "E" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "extend" }); return; }
@@ -1014,6 +1038,7 @@ export default function CADCanvas() {
       if (e.key === "M" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "mirror" }); return; }
       if (e.key === "A" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "array_rect" }); return; }
       if (e.key === "P" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "array_polar" }); return; }
+      if (e.key === "s" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "spline" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
@@ -1055,6 +1080,7 @@ function getCursor(tool: string, panning: boolean): string {
     case "block_insert": return "crosshair";
     case "array_rect": return "crosshair";
     case "array_polar": return "crosshair";
+    case "spline": return "crosshair";
     case "measure_distance": return "crosshair";
     case "measure_area": return "crosshair";
     case "measure_angle": return "crosshair";
@@ -1136,6 +1162,11 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: CADEntity, zoom: numb
       }
       break;
     }
+    case "spline": {
+      const sd = entity.data as SplineData;
+      drawSpline(ctx, sd, entity.color, entity.lineWidth, entity.lineStyle, cx + panX, cy + panY, zoom, selected, selected);
+      break;
+    }
     case "blockref": {
       // Block references are rendered by expanding their child entities
       // The parent canvas loop handles this via getBlockRefEntities
@@ -1181,6 +1212,7 @@ function moveEntityData(data: EntityData, dx: number, dy: number): EntityData | 
     case "dimension": return { ...data, start: { x: data.start.x + dx, y: data.start.y + dy }, end: { x: data.end.x + dx, y: data.end.y + dy } };
     case "hatch": return { ...data, boundary: data.boundary.map(p => ({ x: p.x + dx, y: p.y + dy })) };
     case "blockref": return { ...data, insertPoint: { x: data.insertPoint.x + dx, y: data.insertPoint.y + dy } };
+    case "spline": return moveSpline(data as SplineData, dx, dy);
     default: return null;
   }
 }
