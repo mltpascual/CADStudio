@@ -2,7 +2,7 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import type { ToolType } from "@/lib/cad-types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers } from "lucide-react";
+import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend } from "lucide-react";
 
 interface ToolItem { id: ToolType; label: string; shortcut: string; icon: React.ReactNode; }
 
@@ -25,6 +25,9 @@ const modifyTools: ToolItem[] = [
   { id: "trim", label: "Trim", shortcut: "Shift+T", icon: <Scissors size={16} /> },
   { id: "extend", label: "Extend", shortcut: "Shift+E", icon: <ArrowRightToLine size={16} /> },
   { id: "offset", label: "Offset", shortcut: "O", icon: <Layers size={16} /> },
+  { id: "rotate", label: "Rotate", shortcut: "Shift+R", icon: <RotateCw size={16} /> },
+  { id: "scale", label: "Scale", shortcut: "Shift+S", icon: <Scaling size={16} /> },
+  { id: "fillet", label: "Fillet/Chamfer", shortcut: "F", icon: <Blend size={16} /> },
   { id: "erase", label: "Erase", shortcut: "X", icon: <Eraser size={16} /> },
 ];
 const navTools: ToolItem[] = [

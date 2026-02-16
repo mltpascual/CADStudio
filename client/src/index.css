@@ -44,8 +44,64 @@
   --font-mono: 'Fira Code', monospace;
 }
 
+/* ============================================================
+   LIGHT MODE — Blueprint / Drafting Paper aesthetic
+   ============================================================ */
 :root {
   --radius: 0.375rem;
+  --background: oklch(0.97 0.003 240);
+  --foreground: oklch(0.18 0.02 250);
+  --card: oklch(0.98 0.002 240);
+  --card-foreground: oklch(0.18 0.02 250);
+  --popover: oklch(0.98 0.002 240);
+  --popover-foreground: oklch(0.18 0.02 250);
+  --primary: oklch(0.50 0.20 260);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.93 0.005 240);
+  --secondary-foreground: oklch(0.35 0.02 250);
+  --muted: oklch(0.94 0.004 240);
+  --muted-foreground: oklch(0.50 0.015 250);
+  --accent: oklch(0.92 0.006 240);
+  --accent-foreground: oklch(0.18 0.02 250);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.87 0.008 240);
+  --input: oklch(0.93 0.005 240);
+  --ring: oklch(0.50 0.20 260);
+  --chart-1: oklch(0.50 0.20 260);
+  --chart-2: oklch(0.55 0.17 160);
+  --chart-3: oklch(0.55 0.2 45);
+  --chart-4: oklch(0.55 0.22 25);
+  --chart-5: oklch(0.55 0.15 300);
+  --sidebar: oklch(0.96 0.003 240);
+  --sidebar-foreground: oklch(0.25 0.02 250);
+  --sidebar-primary: oklch(0.50 0.20 260);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.93 0.005 240);
+  --sidebar-accent-foreground: oklch(0.18 0.02 250);
+  --sidebar-border: oklch(0.87 0.008 240);
+  --sidebar-ring: oklch(0.50 0.20 260);
+
+  /* CAD-specific light mode variables */
+  --cad-canvas: #f0f4f8;
+  --cad-grid: #d0d8e0;
+  --cad-grid-major: #b0bcc8;
+  --cad-crosshair: #2563eb;
+  --cad-snap: #059669;
+  --cad-selection: #2563eb;
+  --cad-dimension: #d97706;
+  --cad-toolbar-bg: #e8ecf2;
+  --cad-panel-bg: #f0f4f8;
+  --cad-panel-border: #c8d0da;
+  --cad-entity-default: #1e293b;
+  --cad-statusbar-bg: #e2e8f0;
+  --cad-cmdline-bg: #f8fafc;
+}
+
+/* ============================================================
+   DARK MODE — Obsidian Forge / Precision Workshop
+   ============================================================ */
+.dark {
   --background: oklch(0.11 0.005 260);
   --foreground: oklch(0.92 0.005 260);
   --card: oklch(0.15 0.006 260);
@@ -78,6 +134,8 @@
   --sidebar-accent-foreground: oklch(0.92 0.005 260);
   --sidebar-border: oklch(0.25 0.008 260);
   --sidebar-ring: oklch(0.62 0.19 260);
+
+  /* CAD-specific dark mode variables */
   --cad-canvas: #0d0d0d;
   --cad-grid: #1a1a2e;
   --cad-grid-major: #252540;
@@ -88,6 +146,9 @@
   --cad-toolbar-bg: #141420;
   --cad-panel-bg: #1a1a2e;
   --cad-panel-border: #2a2a40;
+  --cad-entity-default: #e2e8f0;
+  --cad-statusbar-bg: #0f0f1a;
+  --cad-cmdline-bg: #0f0f1a;
 }
 
 @layer base {
@@ -136,15 +197,15 @@
   }
   .cad-toolbar-btn {
     @apply flex items-center justify-center w-8 h-8 rounded transition-colors duration-150;
-    color: oklch(0.7 0.01 260);
+    color: var(--muted-foreground);
   }
   .cad-toolbar-btn:hover {
-    background: oklch(0.25 0.01 260);
-    color: oklch(0.92 0.005 260);
+    background: var(--accent);
+    color: var(--foreground);
   }
   .cad-toolbar-btn.active {
-    background: oklch(0.62 0.19 260);
-    color: oklch(0.98 0 0);
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
   .cad-mono {
     font-family: 'Fira Code', monospace;
@@ -155,5 +216,5 @@
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: oklch(0.3 0.005 260); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: oklch(0.4 0.005 260); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }

@@ -6,6 +6,8 @@ import { trimEntity } from "@/lib/trim-utils";
 import { extendEntity } from "@/lib/extend-utils";
 import { copyEntities } from "@/lib/copy-utils";
 import { offsetEntity } from "@/lib/offset-utils";
+import { rotateEntityData, scaleEntityData } from "@/lib/rotate-scale-utils";
+import { filletEntities, type FilletMode } from "@/lib/fillet-utils";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -20,6 +22,7 @@ export default function CADCanvas() {
   const selBoxEnd = useRef<Point | null>(null);
   const offsetEntityRef = useRef<CADEntity | null>(null);
   const offsetDistRef = useRef<number | null>(null);
+  const filletFirstRef = useRef<CADEntity | null>(null);
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => {
     const canvas = canvasRef.current;
@@ -48,8 +51,16 @@ export default function CADCanvas() {
     ctx.scale(dpr, dpr);
     const w = rect.width, h = rect.height;
 
-    // Background
-    ctx.fillStyle = "#0d0d0d";
+    // Background — read from CSS variable for theme support
+    const computedStyle = getComputedStyle(canvas);
+    const cadCanvas = computedStyle.getPropertyValue('--cad-canvas').trim() || '#0d0d0d';
+    const cadGrid = computedStyle.getPropertyValue('--cad-grid').trim() || '#1a1a2e';
+    const cadGridMajor = computedStyle.getPropertyValue('--cad-grid-major').trim() || '#252540';
+    const cadCrosshair = computedStyle.getPropertyValue('--cad-crosshair').trim() || '#3b82f6';
+    const cadSnap = computedStyle.getPropertyValue('--cad-snap').trim() || '#10b981';
+    const cadDimension = computedStyle.getPropertyValue('--cad-dimension').trim() || '#f59e0b';
+    const cadEntityDefault = computedStyle.getPropertyValue('--cad-entity-default').trim() || '#e2e8f0';
+    ctx.fillStyle = cadCanvas;
     ctx.fillRect(0, 0, w, h);
 
     const { zoom, panX, panY } = state.viewState;
@@ -67,14 +78,14 @@ export default function CADCanvas() {
         for (let x = startX; x < w + spacing; x += spacing) {
           const worldX = (x - cx - panX) / zoom;
           const isMajor = Math.abs(Math.round(worldX / state.gridSettings.spacing) % major) < 0.01;
-          ctx.strokeStyle = isMajor ? "#252540" : "#1a1a2e";
+          ctx.strokeStyle = isMajor ? cadGridMajor : cadGrid;
           ctx.lineWidth = isMajor ? 0.5 : 0.25;
           ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
         }
         for (let y = startY; y < h + spacing; y += spacing) {
           const worldY = (y - cy - panY) / zoom;
           const isMajor = Math.abs(Math.round(worldY / state.gridSettings.spacing) % major) < 0.01;
-          ctx.strokeStyle = isMajor ? "#252540" : "#1a1a2e";
+          ctx.strokeStyle = isMajor ? cadGridMajor : cadGrid;
           ctx.lineWidth = isMajor ? 0.5 : 0.25;
           ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
         }
@@ -82,7 +93,7 @@ export default function CADCanvas() {
         // Dot grid when zoomed out
         const dotSpacing = state.gridSettings.spacing * state.gridSettings.majorEvery * zoom;
         if (dotSpacing > 8) {
-          ctx.fillStyle = "#252540";
+          ctx.fillStyle = cadGridMajor;
           const startX = ((panX + cx) % dotSpacing) - dotSpacing;
           const startY = ((panY + cy) % dotSpacing) - dotSpacing;
           for (let x = startX; x < w + dotSpacing; x += dotSpacing) {
@@ -96,11 +107,11 @@ export default function CADCanvas() {
 
     // Origin axes
     const originScreen = worldToScreen(0, 0);
-    ctx.strokeStyle = "#3b82f620"; ctx.lineWidth = 1;
+    ctx.strokeStyle = cadCrosshair + "20"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, originScreen.y); ctx.lineTo(w, originScreen.y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(originScreen.x, 0); ctx.lineTo(originScreen.x, h); ctx.stroke();
     // Origin marker
-    ctx.fillStyle = "#3b82f640"; ctx.beginPath(); ctx.arc(originScreen.x, originScreen.y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = cadCrosshair + "40"; ctx.beginPath(); ctx.arc(originScreen.x, originScreen.y, 3, 0, Math.PI * 2); ctx.fill();
 
     // Draw entities
     ctx.save();
@@ -117,7 +128,7 @@ export default function CADCanvas() {
     const ds = state.drawingState;
     if (ds.isDrawing && ds.previewPoint) {
       ctx.save();
-      ctx.strokeStyle = "#3b82f680";
+      ctx.strokeStyle = cadCrosshair + "80";
       ctx.lineWidth = 1;
       ctx.setLineDash([6, 4]);
       const tool = state.activeTool;
@@ -168,7 +179,7 @@ export default function CADCanvas() {
         ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
         const dist = distance(ds.startPoint, ds.previewPoint);
         const mx = (s.x + e.x) / 2, my = (s.y + e.y) / 2;
-        ctx.fillStyle = "#f59e0b"; ctx.font = "11px 'Fira Code'"; ctx.textAlign = "center";
+        ctx.fillStyle = cadDimension; ctx.font = "11px 'Fira Code'"; ctx.textAlign = "center";
         ctx.fillText(dist.toFixed(2), mx, my - 8);
       }
       ctx.restore();
@@ -191,7 +202,7 @@ export default function CADCanvas() {
     // Snap indicator
     if (snapPoint) {
       const sp = worldToScreen(snapPoint.point.x, snapPoint.point.y);
-      ctx.strokeStyle = "#10b981"; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = cadSnap; ctx.lineWidth = 1.5;
       if (snapPoint.type === "endpoint" || snapPoint.type === "quadrant") {
         ctx.strokeRect(sp.x - 5, sp.y - 5, 10, 10);
       } else if (snapPoint.type === "midpoint") {
@@ -201,7 +212,7 @@ export default function CADCanvas() {
         ctx.beginPath(); ctx.moveTo(sp.x - 3, sp.y); ctx.lineTo(sp.x + 3, sp.y); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(sp.x, sp.y - 3); ctx.lineTo(sp.x, sp.y + 3); ctx.stroke();
       } else if (snapPoint.type === "grid") {
-        ctx.fillStyle = "#10b98160"; ctx.fillRect(sp.x - 2, sp.y - 2, 4, 4);
+        ctx.fillStyle = cadSnap + "60"; ctx.fillRect(sp.x - 2, sp.y - 2, 4, 4);
       } else {
         ctx.beginPath(); ctx.moveTo(sp.x - 5, sp.y - 5); ctx.lineTo(sp.x + 5, sp.y + 5); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(sp.x + 5, sp.y - 5); ctx.lineTo(sp.x - 5, sp.y + 5); ctx.stroke();
@@ -210,12 +221,12 @@ export default function CADCanvas() {
 
     // Crosshair
     const mScreen = worldToScreen(mouseWorld.x, mouseWorld.y);
-    ctx.strokeStyle = "#3b82f630"; ctx.lineWidth = 0.5;
+    ctx.strokeStyle = cadCrosshair + "30"; ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(mScreen.x, 0); ctx.lineTo(mScreen.x, h); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, mScreen.y); ctx.lineTo(w, mScreen.y); ctx.stroke();
 
     // Coordinates display
-    ctx.fillStyle = "#ffffff80"; ctx.font = "11px 'Fira Code'"; ctx.textAlign = "right";
+    ctx.fillStyle = cadEntityDefault + "80"; ctx.font = "11px 'Fira Code'"; ctx.textAlign = "right";
     ctx.fillText(`X: ${mouseWorld.x.toFixed(4)}  Y: ${mouseWorld.y.toFixed(4)}`, w - 12, h - 12);
   }, [state, mouseWorld, snapPoint, worldToScreen]);
 
@@ -528,6 +539,109 @@ export default function CADCanvas() {
       }
       return;
     }
+
+    if (tool === "rotate") {
+      if (state.selectedEntityIds.length === 0) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "ROTATE", timestamp: Date.now(), result: "Select entities first" } });
+        return;
+      }
+      if (!state.drawingState.isDrawing) {
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, previewPoint: pt } });
+        dispatch({ type: "ADD_COMMAND", entry: { command: "ROTATE", timestamp: Date.now(), result: "Base point set. Click to define angle." } });
+      } else if (state.drawingState.startPoint) {
+        const angleStr = prompt("Enter rotation angle in degrees (positive = counter-clockwise):");
+        if (angleStr && !isNaN(parseFloat(angleStr))) {
+          pushUndo();
+          const angle = (parseFloat(angleStr) * Math.PI) / 180;
+          for (const id of state.selectedEntityIds) {
+            const ent = state.entities.find(e => e.id === id);
+            if (!ent) continue;
+            const rotated = rotateEntityData(ent.data, state.drawingState.startPoint, angle);
+            dispatch({ type: "UPDATE_ENTITY", id, updates: { data: rotated, type: rotated.type } });
+          }
+          dispatch({ type: "ADD_COMMAND", entry: { command: "ROTATE", timestamp: Date.now(), result: `Rotated ${state.selectedEntityIds.length} entities by ${angleStr}°` } });
+        }
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, previewPoint: null } });
+      }
+      return;
+    }
+
+    if (tool === "scale") {
+      if (state.selectedEntityIds.length === 0) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "SCALE", timestamp: Date.now(), result: "Select entities first" } });
+        return;
+      }
+      if (!state.drawingState.isDrawing) {
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, previewPoint: pt } });
+        dispatch({ type: "ADD_COMMAND", entry: { command: "SCALE", timestamp: Date.now(), result: "Base point set. Enter scale factor." } });
+      } else if (state.drawingState.startPoint) {
+        const factorStr = prompt("Enter scale factor (e.g. 2 = double, 0.5 = half):");
+        if (factorStr && !isNaN(parseFloat(factorStr)) && parseFloat(factorStr) > 0) {
+          pushUndo();
+          const factor = parseFloat(factorStr);
+          for (const id of state.selectedEntityIds) {
+            const ent = state.entities.find(e => e.id === id);
+            if (!ent) continue;
+            const scaled = scaleEntityData(ent.data, state.drawingState.startPoint, factor);
+            dispatch({ type: "UPDATE_ENTITY", id, updates: { data: scaled } });
+          }
+          dispatch({ type: "ADD_COMMAND", entry: { command: "SCALE", timestamp: Date.now(), result: `Scaled ${state.selectedEntityIds.length} entities by ${factorStr}x` } });
+        }
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, previewPoint: null } });
+      }
+      return;
+    }
+
+    if (tool === "fillet") {
+      const tolerance = 8 / state.viewState.zoom;
+      if (!filletFirstRef.current) {
+        // Step 1: Pick first line
+        for (let i = state.entities.length - 1; i >= 0; i--) {
+          const ent = state.entities[i];
+          if (!ent.visible || ent.locked) continue;
+          if (ent.data.type !== "line") continue;
+          const layer = state.layers.find(l => l.id === ent.layerId);
+          if (layer && (!layer.visible || layer.locked)) continue;
+          if (hitTestEntity(ent, pt, tolerance)) {
+            filletFirstRef.current = ent;
+            dispatch({ type: "ADD_COMMAND", entry: { command: "FILLET", timestamp: Date.now(), result: "First line selected. Click second line." } });
+            return;
+          }
+        }
+        dispatch({ type: "ADD_COMMAND", entry: { command: "FILLET", timestamp: Date.now(), result: "Click a line entity" } });
+      } else {
+        // Step 2: Pick second line and apply fillet
+        for (let i = state.entities.length - 1; i >= 0; i--) {
+          const ent = state.entities[i];
+          if (!ent.visible || ent.locked || ent.id === filletFirstRef.current.id) continue;
+          if (ent.data.type !== "line") continue;
+          const layer = state.layers.find(l => l.id === ent.layerId);
+          if (layer && (!layer.visible || layer.locked)) continue;
+          if (hitTestEntity(ent, pt, tolerance)) {
+            const modeStr = prompt("Enter radius (0 for sharp corner).\nPrefix with 'c' for chamfer (e.g. 'c10'):");
+            if (modeStr !== null) {
+              const isChamfer = modeStr.toLowerCase().startsWith("c");
+              const numStr = isChamfer ? modeStr.slice(1).trim() : modeStr.trim();
+              const radius = parseFloat(numStr) || 0;
+              const mode: FilletMode = isChamfer ? "chamfer" : "fillet";
+              const result = filletEntities(filletFirstRef.current, ent, radius, mode, state.entities);
+              if (result) {
+                pushUndo();
+                dispatch({ type: "REMOVE_ENTITIES", ids: result.removeIds });
+                dispatch({ type: "ADD_ENTITIES", entities: result.addEntities });
+                dispatch({ type: "ADD_COMMAND", entry: { command: mode === "chamfer" ? "CHAMFER" : "FILLET", timestamp: Date.now(), result: `${mode === "chamfer" ? "Chamfered" : "Filleted"} with ${mode === "chamfer" ? "distance" : "radius"} ${radius}` } });
+              } else {
+                dispatch({ type: "ADD_COMMAND", entry: { command: "FILLET", timestamp: Date.now(), result: "Could not fillet these entities" } });
+              }
+            }
+            filletFirstRef.current = null;
+            return;
+          }
+        }
+        dispatch({ type: "ADD_COMMAND", entry: { command: "FILLET", timestamp: Date.now(), result: "Click a second line entity" } });
+      }
+      return;
+    }
   }, [state, getWorldPoint, processPoint, createEntity, dispatch, pushUndo]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -596,12 +710,15 @@ export default function CADCanvas() {
         if (e.key === "a") { e.preventDefault(); dispatch({ type: "SELECT_ENTITIES", ids: state.entities.filter(en => en.visible && !en.locked).map(en => en.id) }); return; }
         if (e.key === "s") { e.preventDefault(); return; }
       }
-      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
+      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
       if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedEntityIds.length) { pushUndo(); dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds }); } return; }
       if (e.key === "T" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "trim" }); return; }
       if (e.key === "E" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "extend" }); return; }
       if (e.key === "C" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "copy" }); return; }
       if (e.key === "o" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "offset" }); return; }
+      if (e.key === "R" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "rotate" }); return; }
+      if (e.key === "S" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "scale" }); return; }
+      if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "fillet" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
@@ -634,6 +751,9 @@ function getCursor(tool: string, panning: boolean): string {
     case "extend": return "crosshair";
     case "copy": return "crosshair";
     case "offset": return "crosshair";
+    case "rotate": return "crosshair";
+    case "scale": return "crosshair";
+    case "fillet": return "crosshair";
     case "text": return "text";
     default: return "crosshair";
   }

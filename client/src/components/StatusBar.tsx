@@ -5,7 +5,7 @@ export default function StatusBar() {
   const activeLayer = state.layers.find(l => l.id === state.activeLayerId);
 
   return (
-    <div className="flex items-center h-6 px-3 gap-4 border-t select-none" style={{ background: "var(--cad-toolbar-bg)", borderColor: "var(--cad-panel-border)" }}>
+    <div className="flex items-center h-6 px-3 gap-4 border-t select-none" style={{ background: "var(--cad-statusbar-bg, var(--cad-toolbar-bg))", borderColor: "var(--cad-panel-border)" }}>
       <StatusItem label="Tool" value={state.activeTool.toUpperCase()} />
       <StatusItem label="Layer" value={activeLayer?.name || "—"} color={activeLayer?.color} />
       <StatusItem label="Color" value="" color={state.activeColor} />

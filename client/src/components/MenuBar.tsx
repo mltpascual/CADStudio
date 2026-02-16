@@ -2,7 +2,8 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import { exportToDXF, exportToSVG } from "@/lib/cad-utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuShortcut } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { FileDown, FileUp, Undo2, Redo2, Trash2, Copy, Grid3X3, Magnet, Layers, Terminal, PanelRight, CornerDownRight } from "lucide-react";
+import { FileDown, FileUp, Undo2, Redo2, Trash2, Copy, Grid3X3, Magnet, Layers, Terminal, PanelRight, CornerDownRight, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 import SnapSettingsDialog from "./SnapSettingsDialog";
 import ShortcutsDialog from "./ShortcutsDialog";
 
@@ -11,6 +12,7 @@ const LOGO_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/
 export default function MenuBar() {
   const { state } = useCAD();
   const { undo, redo, deselectAll, dispatch } = useCADActions();
+  const { theme, toggleTheme } = useTheme();
 
   const handleExportDXF = () => { downloadFile(exportToDXF(state.entities), "drawing.dxf", "application/dxf"); toast.success("Exported as DXF"); };
   const handleExportSVG = () => { downloadFile(exportToSVG(state.entities), "drawing.svg", "image/svg+xml"); toast.success("Exported as SVG"); };
@@ -102,6 +104,13 @@ export default function MenuBar() {
         <button className={`cad-toolbar-btn ${state.gridSettings.visible ? "active" : ""}`} onClick={() => dispatch({ type: "SET_GRID_SETTINGS", settings: { visible: !state.gridSettings.visible } })} title="Grid Display"><Grid3X3 size={14} /></button>
         <SnapSettingsDialog />
         <ShortcutsDialog />
+        <button
+          className="cad-toolbar-btn"
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+        >
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
       </div>
 
       <div className="cad-mono text-muted-foreground/60 ml-2 min-w-[60px] text-right">{(state.viewState.zoom * 100).toFixed(0)}%</div>
