@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { FileDown, FileUp, Undo2, Redo2, Trash2, Copy, Grid3X3, Layers, Terminal, PanelRight, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import ShortcutsDialog from "./ShortcutsDialog";
+import { NamedViewsButton } from "./NamedViewsPanel";
 
 const LOGO_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663343684150/bRJEUWLqFHNMPniX.png";
 
@@ -91,12 +92,18 @@ export default function MenuBar() {
           <DropdownMenuItem onClick={() => dispatch({ type: "TOGGLE_LAYERS" })}><Layers className="mr-2 h-3.5 w-3.5" />{state.showLayers ? "Hide Layers" : "Show Layers"}</DropdownMenuItem>
           <DropdownMenuItem onClick={() => dispatch({ type: "TOGGLE_PROPERTIES" })}><PanelRight className="mr-2 h-3.5 w-3.5" />{state.showProperties ? "Hide Properties" : "Show Properties"}</DropdownMenuItem>
           <DropdownMenuItem onClick={() => dispatch({ type: "TOGGLE_COMMAND_LINE" })}><Terminal className="mr-2 h-3.5 w-3.5" />{state.showCommandLine ? "Hide Command Line" : "Show Command Line"}</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => dispatch({ type: "SET_ACTIVE_LAYOUT", layoutId: null })}>{state.activeSpace === "model" ? "✓ " : "  "}Model Space</DropdownMenuItem>
+          {state.layouts.map(l => (
+            <DropdownMenuItem key={l.id} onClick={() => dispatch({ type: "SET_ACTIVE_LAYOUT", layoutId: l.id })}>{state.activeLayoutId === l.id ? "✓ " : "  "}{l.name}</DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
       <div className="flex-1" />
 
       <div className="flex items-center gap-0.5">
+        <NamedViewsButton />
         <button className="cad-toolbar-btn" onClick={undo} title="Undo (Ctrl+Z)"><Undo2 size={14} /></button>
         <button className="cad-toolbar-btn" onClick={redo} title="Redo (Ctrl+Y)"><Redo2 size={14} /></button>
         <ShortcutsDialog />

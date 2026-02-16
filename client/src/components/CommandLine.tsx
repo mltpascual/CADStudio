@@ -59,7 +59,18 @@ export default function CommandLine() {
         result = "Use the canvas to explode blocks (select block, type EXPLODE)";
       }
     }
-    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, SPLINE, XLINE, RAY, TEXT, DIM, HATCH, BLOCK, INSERT, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, ARRAYRECT, ARRAYPOLAR, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT"; }
+    else if (t === "model" || t === "mspace") { dispatch({ type: "SET_ACTIVE_LAYOUT", layoutId: null }); result = "Switched to Model Space"; }
+    else if (t === "paper" || t === "pspace") {
+      if (state.layouts.length > 0) { dispatch({ type: "SET_ACTIVE_LAYOUT", layoutId: state.layouts[0].id }); result = `Switched to Paper Space: ${state.layouts[0].name}`; }
+      else result = "No layouts defined. Create a layout first.";
+    }
+    else if (t.startsWith("layout ")) {
+      const name = cmd.trim().slice(7).trim();
+      const found = state.layouts.find(l => l.name.toLowerCase() === name.toLowerCase());
+      if (found) { dispatch({ type: "SET_ACTIVE_LAYOUT", layoutId: found.id }); result = `Layout: ${found.name}`; }
+      else result = `Layout "${name}" not found`;
+    }
+    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, SPLINE, XLINE, RAY, TEXT, DIM, HATCH, BLOCK, INSERT, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, ARRAYRECT, ARRAYPOLAR, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT, MODEL, PAPER, LAYOUT <name>"; }
     else result = `Unknown: ${t}`;
     dispatch({ type: "ADD_COMMAND", entry: { command: cmd.trim(), timestamp: Date.now(), result } });
     setInput(""); setHistIdx(-1);

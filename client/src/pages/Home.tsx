@@ -8,6 +8,7 @@ import CommandLine from "@/components/CommandLine";
 import StatusBar from "@/components/StatusBar";
 import SnapToolbar from "@/components/SnapToolbar";
 import HotkeyGuide from "@/components/HotkeyGuide";
+import LayoutManager from "@/components/LayoutManager";
 
 function CADWorkspace() {
   const { state } = useCAD();
@@ -26,6 +27,7 @@ function CADWorkspace() {
         </div>
         {state.showLayers && <LayersPanel />}
       </div>
+      <LayoutManager />
       <SnapToolbar />
       <StatusBar />
       <HotkeyGuide />

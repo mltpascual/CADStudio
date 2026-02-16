@@ -243,6 +243,42 @@
     opacity: 0.2;
     pointer-events: none;
   }
+  /* Layout tab styles */
+  .layout-tab {
+    @apply flex items-center gap-1 px-2.5 py-0.5 rounded transition-colors duration-150;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  .layout-tab:hover {
+    background: var(--accent);
+    color: var(--foreground);
+  }
+  .layout-tab.active {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-weight: 600;
+  }
+  .layout-tab.add {
+    @apply w-5 h-5 flex items-center justify-center;
+    color: var(--muted-foreground);
+    border: 1px dashed var(--border);
+  }
+  .layout-tab.add:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: oklch(from var(--primary) l c h / 0.1);
+  }
+  .layout-tab-action {
+    @apply flex items-center justify-center w-4 h-4 rounded transition-colors duration-150;
+    color: var(--muted-foreground);
+  }
+  .layout-tab-action:hover {
+    color: var(--foreground);
+    background: var(--accent);
+  }
+
   .snap-toggle-label {
     font-family: 'Fira Code', monospace;
     font-size: 9px;

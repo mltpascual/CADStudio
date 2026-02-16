@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, type ReactNode, type Dispatch } from "react";
-import type { CADState, CADEntity, Layer, ToolType, LineStyle, ViewState, GridSettings, SnapSettings, CommandEntry, BlockDefinition, HatchPattern, PolarTrackingSettings } from "@/lib/cad-types";
+import type { CADState, CADEntity, Layer, ToolType, LineStyle, ViewState, GridSettings, SnapSettings, CommandEntry, BlockDefinition, HatchPattern, PolarTrackingSettings, Layout, NamedView, LayoutViewport } from "@/lib/cad-types";
 import { DEFAULT_LAYERS } from "@/lib/cad-types";
 
 type Action =
@@ -39,7 +39,18 @@ type Action =
   | { type: "SET_HATCH_ANGLE"; angle: number }
   | { type: "SET_POLAR_TRACKING"; settings: Partial<PolarTrackingSettings> }
   | { type: "TOGGLE_POLAR_TRACKING" }
-  | { type: "TOGGLE_DYNAMIC_INPUT" };
+  | { type: "TOGGLE_DYNAMIC_INPUT" }
+  | { type: "ADD_LAYOUT"; layout: Layout }
+  | { type: "UPDATE_LAYOUT"; id: string; updates: Partial<Layout> }
+  | { type: "REMOVE_LAYOUT"; id: string }
+  | { type: "SET_ACTIVE_LAYOUT"; layoutId: string | null }
+  | { type: "SET_ACTIVE_SPACE"; space: "model" | "paper" }
+  | { type: "ADD_VIEWPORT"; layoutId: string; viewport: LayoutViewport }
+  | { type: "UPDATE_VIEWPORT"; layoutId: string; viewportId: string; updates: Partial<LayoutViewport> }
+  | { type: "REMOVE_VIEWPORT"; layoutId: string; viewportId: string }
+  | { type: "ADD_NAMED_VIEW"; view: NamedView }
+  | { type: "REMOVE_NAMED_VIEW"; id: string }
+  | { type: "RESTORE_NAMED_VIEW"; id: string };
 
 const initialState: CADState = {
   entities: [],
@@ -67,6 +78,10 @@ const initialState: CADState = {
   activeHatchAngle: 0,
   polarTracking: { enabled: false, increment: 45, additionalAngles: [], trackFromLastPoint: true },
   dynamicInputEnabled: true,
+  layouts: [],
+  activeLayoutId: null,
+  namedViews: [],
+  activeSpace: "model",
 };
 
 function reducer(state: CADState, action: Action): CADState {
@@ -108,6 +123,25 @@ function reducer(state: CADState, action: Action): CADState {
     case "SET_POLAR_TRACKING": return { ...state, polarTracking: { ...state.polarTracking, ...action.settings } };
     case "TOGGLE_POLAR_TRACKING": return { ...state, polarTracking: { ...state.polarTracking, enabled: !state.polarTracking.enabled } };
     case "TOGGLE_DYNAMIC_INPUT": return { ...state, dynamicInputEnabled: !state.dynamicInputEnabled };
+    // Layout / Viewport system
+    case "ADD_LAYOUT": return { ...state, layouts: [...state.layouts, action.layout] };
+    case "UPDATE_LAYOUT": return { ...state, layouts: state.layouts.map(l => l.id === action.id ? { ...l, ...action.updates } : l) };
+    case "REMOVE_LAYOUT": {
+      const newLayouts = state.layouts.filter(l => l.id !== action.id);
+      const newActiveId = state.activeLayoutId === action.id ? null : state.activeLayoutId;
+      return { ...state, layouts: newLayouts, activeLayoutId: newActiveId, activeSpace: newActiveId ? "paper" : "model" };
+    }
+    case "SET_ACTIVE_LAYOUT": return { ...state, activeLayoutId: action.layoutId, activeSpace: action.layoutId ? "paper" : "model" };
+    case "SET_ACTIVE_SPACE": return { ...state, activeSpace: action.space, activeLayoutId: action.space === "model" ? null : state.activeLayoutId };
+    case "ADD_VIEWPORT": return { ...state, layouts: state.layouts.map(l => l.id === action.layoutId ? { ...l, viewports: [...l.viewports, action.viewport] } : l) };
+    case "UPDATE_VIEWPORT": return { ...state, layouts: state.layouts.map(l => l.id === action.layoutId ? { ...l, viewports: l.viewports.map(v => v.id === action.viewportId ? { ...v, ...action.updates } : v) } : l) };
+    case "REMOVE_VIEWPORT": return { ...state, layouts: state.layouts.map(l => l.id === action.layoutId ? { ...l, viewports: l.viewports.filter(v => v.id !== action.viewportId) } : l) };
+    case "ADD_NAMED_VIEW": return { ...state, namedViews: [...state.namedViews, action.view] };
+    case "REMOVE_NAMED_VIEW": return { ...state, namedViews: state.namedViews.filter(v => v.id !== action.id) };
+    case "RESTORE_NAMED_VIEW": {
+      const nv = state.namedViews.find(v => v.id === action.id);
+      return nv ? { ...state, viewState: { ...nv.viewState }, activeSpace: "model", activeLayoutId: null } : state;
+    }
     default: return state;
   }
 }

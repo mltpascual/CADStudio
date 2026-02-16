@@ -79,6 +79,14 @@ const groups: ShortcutGroup[] = [
     ],
   },
   {
+    title: "Layout & Views",
+    items: [
+      { key: "Cmd", label: "MODEL / PAPER", color: "#8b5cf6" },
+      { key: "Cmd", label: "LAYOUT <name>", color: "#8b5cf6" },
+      { key: "Cmd", label: "ZOOMFIT", color: "#8b5cf6" },
+    ],
+  },
+  {
     title: "Settings",
     items: [
       { key: "F3", label: "Toggle OSNAP", color: "#ec4899" },

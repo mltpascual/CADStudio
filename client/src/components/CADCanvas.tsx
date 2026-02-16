@@ -15,6 +15,7 @@ import { createBlockDefinition, createBlockRefEntity, getBlockRefEntities, explo
 import { createRectangularArray, createPolarArray, getEntitiesCentroid } from "@/lib/array-utils";
 import { drawSpline, drawSplinePreview, hitTestSpline, moveSpline } from "@/lib/spline-utils";
 import { drawXLine, drawRay, moveXLine, moveRay } from "@/lib/xline-utils";
+import { drawPaperSheet, drawViewportFrame, drawTitleBlock, getPaperPixelSize, MM_TO_PX } from "@/lib/layout-utils";
 import type { BlockRefData, SplineData, XLineData, RayData } from "@/lib/cad-types";
 import DynamicInput from "@/components/DynamicInput";
 
@@ -389,6 +390,69 @@ export default function CADCanvas() {
     // Coordinates display
     ctx.fillStyle = cadEntityDefault + "80"; ctx.font = "11px 'Fira Code'"; ctx.textAlign = "right";
     ctx.fillText(`X: ${mouseWorld.x.toFixed(4)}  Y: ${mouseWorld.y.toFixed(4)}`, w - 12, h - 12);
+
+    // Paper space overlay — render when a layout is active
+    const activeLayout = state.activeLayoutId ? state.layouts.find(l => l.id === state.activeLayoutId) : null;
+    if (activeLayout && state.activeSpace === "paper") {
+      const isDark = document.documentElement.classList.contains('dark');
+      const { w: paperW, h: paperH } = getPaperPixelSize(activeLayout);
+      const paperZoom = Math.min((w - 80) / paperW, (h - 80) / paperH, 1.5);
+      const paperOffX = (w - paperW * paperZoom) / 2;
+      const paperOffY = (h - paperH * paperZoom) / 2;
+
+      // Dim the model space background
+      ctx.fillStyle = isDark ? 'rgba(5,5,15,0.85)' : 'rgba(200,210,220,0.85)';
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw paper sheet
+      drawPaperSheet(ctx, activeLayout, paperOffX, paperOffY, paperZoom, isDark);
+
+      // Draw viewports with clipped model space content
+      for (const vp of activeLayout.viewports) {
+        const vpX = paperOffX + vp.x * MM_TO_PX * paperZoom;
+        const vpY = paperOffY + vp.y * MM_TO_PX * paperZoom;
+        const vpW = vp.width * MM_TO_PX * paperZoom;
+        const vpH = vp.height * MM_TO_PX * paperZoom;
+
+        // Clip to viewport bounds
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(vpX, vpY, vpW, vpH);
+        ctx.clip();
+
+        // Viewport background
+        ctx.fillStyle = isDark ? '#0a0a12' : '#f4f6f9';
+        ctx.fillRect(vpX, vpY, vpW, vpH);
+
+        // Render model space entities within viewport
+        const vpCx = vpX + vpW / 2;
+        const vpCy = vpY + vpH / 2;
+        const vpZoom = vp.viewZoom * paperZoom;
+        const vpPanX = -vp.viewCenter.x * vpZoom;
+        const vpPanY = -vp.viewCenter.y * vpZoom;
+
+        for (const entity of state.entities) {
+          if (!entity.visible) continue;
+          const layer = state.layers.find(l => l.id === entity.layerId);
+          if (layer && !layer.visible) continue;
+          drawEntity(ctx, entity, vpZoom, vpPanX, vpPanY, vpCx, vpCy, false);
+        }
+
+        ctx.restore();
+
+        // Draw viewport frame
+        drawViewportFrame(ctx, vp, paperOffX, paperOffY, paperZoom, vp.active, isDark);
+      }
+
+      // Draw title block
+      drawTitleBlock(ctx, activeLayout, paperOffX, paperOffY, paperZoom, isDark);
+
+      // Paper space label
+      ctx.fillStyle = isDark ? '#6366f1' : '#4338ca';
+      ctx.font = "bold 12px 'Space Grotesk'";
+      ctx.textAlign = "left";
+      ctx.fillText(`PAPER: ${activeLayout.name} (${activeLayout.paperSize} ${activeLayout.orientation})`, 12, 20);
+    }
   }, [state, mouseWorld, snapPoint, measureResult, worldToScreen]);
 
   // Resize
