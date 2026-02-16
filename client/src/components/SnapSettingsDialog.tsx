@@ -19,7 +19,7 @@ export default function SnapSettingsDialog() {
       <DialogTrigger asChild>
         <button className="cad-toolbar-btn" title="Snap & Grid Settings"><Settings2 size={14} /></button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[400px]" style={{ background: "var(--cad-panel-bg)", borderColor: "var(--cad-panel-border)" }}>
+      <DialogContent className="sm:max-w-[400px] bg-card text-card-foreground border-border">
         <DialogHeader><DialogTitle className="text-sm font-semibold">Snap & Grid Settings</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
           <div>

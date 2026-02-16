@@ -11,7 +11,7 @@ function CADWorkspace() {
   const { state } = useCAD();
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ background: "#0d0d0d" }}>
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background text-foreground">
       <MenuBar />
       <div className="flex flex-1 overflow-hidden">
         <Toolbar />

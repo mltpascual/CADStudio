@@ -2,7 +2,7 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import type { ToolType } from "@/lib/cad-types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend } from "lucide-react";
+import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend, FlipHorizontal2, RulerIcon, Triangle, Compass } from "lucide-react";
 
 interface ToolItem { id: ToolType; label: string; shortcut: string; icon: React.ReactNode; }
 
@@ -22,6 +22,7 @@ const annotateTools: ToolItem[] = [
 const modifyTools: ToolItem[] = [
   { id: "move", label: "Move", shortcut: "M", icon: <Move size={16} /> },
   { id: "copy", label: "Copy", shortcut: "Shift+C", icon: <Copy size={16} /> },
+  { id: "mirror", label: "Mirror", shortcut: "Shift+M", icon: <FlipHorizontal2 size={16} /> },
   { id: "trim", label: "Trim", shortcut: "Shift+T", icon: <Scissors size={16} /> },
   { id: "extend", label: "Extend", shortcut: "Shift+E", icon: <ArrowRightToLine size={16} /> },
   { id: "offset", label: "Offset", shortcut: "O", icon: <Layers size={16} /> },
@@ -29,6 +30,11 @@ const modifyTools: ToolItem[] = [
   { id: "scale", label: "Scale", shortcut: "Shift+S", icon: <Scaling size={16} /> },
   { id: "fillet", label: "Fillet/Chamfer", shortcut: "F", icon: <Blend size={16} /> },
   { id: "erase", label: "Erase", shortcut: "X", icon: <Eraser size={16} /> },
+];
+const measureTools: ToolItem[] = [
+  { id: "measure_distance", label: "Measure Distance", shortcut: "", icon: <RulerIcon size={16} /> },
+  { id: "measure_area", label: "Measure Area", shortcut: "", icon: <Triangle size={16} /> },
+  { id: "measure_angle", label: "Measure Angle", shortcut: "", icon: <Compass size={16} /> },
 ];
 const navTools: ToolItem[] = [
   { id: "pan", label: "Pan", shortcut: "Middle Mouse", icon: <Hand size={16} /> },
@@ -58,12 +64,14 @@ export default function Toolbar() {
   );
 
   return (
-    <div className="flex flex-col items-center py-2 px-1 gap-1 border-r" style={{ background: "var(--cad-toolbar-bg)", borderColor: "var(--cad-panel-border)", width: "42px" }}>
+    <div className="flex flex-col items-center py-2 px-1 gap-1 border-r overflow-y-auto" style={{ background: "var(--cad-toolbar-bg)", borderColor: "var(--cad-panel-border)", width: "42px" }}>
       {renderGroup(drawTools, "Draw")}
       <Separator className="w-6 my-1 opacity-20" />
       {renderGroup(annotateTools, "Note")}
       <Separator className="w-6 my-1 opacity-20" />
       {renderGroup(modifyTools, "Edit")}
+      <Separator className="w-6 my-1 opacity-20" />
+      {renderGroup(measureTools, "Meas")}
       <Separator className="w-6 my-1 opacity-20" />
       {renderGroup(navTools, "Nav")}
     </div>

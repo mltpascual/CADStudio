@@ -19,7 +19,7 @@ export default function PropertiesPanel() {
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground/60 block mb-1">Color</label>
           <div className="flex flex-wrap gap-1">
             {ENTITY_COLORS.map(color => (
-              <button key={color} className={`w-5 h-5 rounded-sm border transition-all ${state.activeColor === color ? "border-white scale-110" : "border-white/10 hover:border-white/30"}`} style={{ backgroundColor: color }} onClick={() => dispatch({ type: "SET_COLOR", color })} />
+              <button key={color} className={`w-5 h-5 rounded-sm border transition-all ${state.activeColor === color ? "border-foreground scale-110 ring-1 ring-primary" : "border-border hover:border-foreground/30"}`} style={{ backgroundColor: color }} onClick={() => dispatch({ type: "SET_COLOR", color })} />
             ))}
           </div>
         </div>

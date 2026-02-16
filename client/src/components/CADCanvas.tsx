@@ -8,6 +8,8 @@ import { copyEntities } from "@/lib/copy-utils";
 import { offsetEntity } from "@/lib/offset-utils";
 import { rotateEntityData, scaleEntityData } from "@/lib/rotate-scale-utils";
 import { filletEntities, type FilletMode } from "@/lib/fillet-utils";
+import { mirrorEntities } from "@/lib/mirror-utils";
+import { measureDistance, measureArea, measureAngle, drawDistanceOverlay, drawAreaOverlay, drawAngleOverlay, type MeasureResult } from "@/lib/measure-utils";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -23,6 +25,9 @@ export default function CADCanvas() {
   const offsetEntityRef = useRef<CADEntity | null>(null);
   const offsetDistRef = useRef<number | null>(null);
   const filletFirstRef = useRef<CADEntity | null>(null);
+  const mirrorAxisStart = useRef<Point | null>(null);
+  const measurePoints = useRef<Point[]>([]);
+  const [measureResult, setMeasureResult] = useState<MeasureResult | null>(null);
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => {
     const canvas = canvasRef.current;
@@ -219,6 +224,58 @@ export default function CADCanvas() {
       }
     }
 
+    // Measurement overlays
+    const measureColor = "#f97316";
+    if (measureResult && measurePoints.current.length >= 2) {
+      if (measureResult.type === "distance") {
+        const sp1 = worldToScreen(measurePoints.current[0].x, measurePoints.current[0].y);
+        const sp2 = worldToScreen(measurePoints.current[1].x, measurePoints.current[1].y);
+        drawDistanceOverlay(ctx, sp1, sp2, measureResult, measureColor);
+      } else if (measureResult.type === "area" && measurePoints.current.length >= 3) {
+        const screenPts = measurePoints.current.map(p => worldToScreen(p.x, p.y));
+        drawAreaOverlay(ctx, screenPts, measureResult, measureColor);
+      } else if (measureResult.type === "angle" && measurePoints.current.length >= 3) {
+        const sp1 = worldToScreen(measurePoints.current[0].x, measurePoints.current[0].y);
+        const sp2 = worldToScreen(measurePoints.current[1].x, measurePoints.current[1].y);
+        const sp3 = worldToScreen(measurePoints.current[2].x, measurePoints.current[2].y);
+        drawAngleOverlay(ctx, sp1, sp2, sp3, measureResult, measureColor);
+      }
+    }
+    // In-progress measurement preview
+    if ((state.activeTool === "measure_distance" || state.activeTool === "measure_area" || state.activeTool === "measure_angle") && measurePoints.current.length > 0 && !measureResult) {
+      ctx.save();
+      ctx.strokeStyle = measureColor + "80";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      const pts = measurePoints.current.map(p => worldToScreen(p.x, p.y));
+      const mPt = worldToScreen(mouseWorld.x, mouseWorld.y);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.lineTo(mPt.x, mPt.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Draw dots at placed points
+      ctx.fillStyle = measureColor;
+      for (const p of pts) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+
+    // Mirror axis preview
+    if (state.activeTool === "mirror" && mirrorAxisStart.current) {
+      const axS = worldToScreen(mirrorAxisStart.current.x, mirrorAxisStart.current.y);
+      const axE = worldToScreen(mouseWorld.x, mouseWorld.y);
+      ctx.save();
+      ctx.strokeStyle = "#a855f7";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(axS.x, axS.y); ctx.lineTo(axE.x, axE.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#a855f7";
+      ctx.beginPath(); ctx.arc(axS.x, axS.y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
     // Crosshair
     const mScreen = worldToScreen(mouseWorld.x, mouseWorld.y);
     ctx.strokeStyle = cadCrosshair + "30"; ctx.lineWidth = 0.5;
@@ -228,7 +285,7 @@ export default function CADCanvas() {
     // Coordinates display
     ctx.fillStyle = cadEntityDefault + "80"; ctx.font = "11px 'Fira Code'"; ctx.textAlign = "right";
     ctx.fillText(`X: ${mouseWorld.x.toFixed(4)}  Y: ${mouseWorld.y.toFixed(4)}`, w - 12, h - 12);
-  }, [state, mouseWorld, snapPoint, worldToScreen]);
+  }, [state, mouseWorld, snapPoint, measureResult, worldToScreen]);
 
   // Resize
   useEffect(() => {
@@ -642,6 +699,70 @@ export default function CADCanvas() {
       }
       return;
     }
+
+    if (tool === "mirror") {
+      if (state.selectedEntityIds.length === 0) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MIRROR", timestamp: Date.now(), result: "Select entities first" } });
+        return;
+      }
+      if (!mirrorAxisStart.current) {
+        mirrorAxisStart.current = pt;
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MIRROR", timestamp: Date.now(), result: "First axis point set. Click second point." } });
+      } else {
+        pushUndo();
+        const { newEntities, removeIds } = mirrorEntities(state.entities, state.selectedEntityIds, mirrorAxisStart.current, pt, true);
+        if (newEntities.length > 0) {
+          dispatch({ type: "ADD_ENTITIES", entities: newEntities });
+          dispatch({ type: "ADD_COMMAND", entry: { command: "MIRROR", timestamp: Date.now(), result: `Mirrored ${newEntities.length} entities` } });
+        }
+        mirrorAxisStart.current = null;
+      }
+      return;
+    }
+
+    if (tool === "measure_distance") {
+      if (!state.drawingState.isDrawing) {
+        measurePoints.current = [pt];
+        setMeasureResult(null);
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, previewPoint: pt } });
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MEASURE", timestamp: Date.now(), result: "First point set. Click second point." } });
+      } else {
+        const result = measureDistance(measurePoints.current[0], pt);
+        setMeasureResult(result);
+        measurePoints.current = [measurePoints.current[0], pt];
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MEASURE", timestamp: Date.now(), result: `Distance: ${result.value.toFixed(4)}` } });
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, previewPoint: null } });
+      }
+      return;
+    }
+
+    if (tool === "measure_area") {
+      measurePoints.current = [...measurePoints.current, pt];
+      if (measurePoints.current.length >= 3) {
+        const result = measureArea(measurePoints.current);
+        setMeasureResult(result);
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MEASURE", timestamp: Date.now(), result: `Area: ${result.value.toFixed(4)} (${measurePoints.current.length} pts, right-click to finish)` } });
+      } else {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MEASURE", timestamp: Date.now(), result: `Point ${measurePoints.current.length} set. Click more points (min 3).` } });
+      }
+      dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: measurePoints.current[0], currentPoints: measurePoints.current, previewPoint: pt } });
+      return;
+    }
+
+    if (tool === "measure_angle") {
+      measurePoints.current = [...measurePoints.current, pt];
+      if (measurePoints.current.length === 1) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MEASURE", timestamp: Date.now(), result: "First point set. Click vertex point." } });
+      } else if (measurePoints.current.length === 2) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MEASURE", timestamp: Date.now(), result: "Vertex set. Click third point." } });
+      } else if (measurePoints.current.length >= 3) {
+        const result = measureAngle(measurePoints.current[0], measurePoints.current[1], measurePoints.current[2]);
+        setMeasureResult(result);
+        dispatch({ type: "ADD_COMMAND", entry: { command: "MEASURE", timestamp: Date.now(), result: `Angle: ${result.value.toFixed(2)}°` } });
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, previewPoint: null } });
+      }
+      return;
+    }
   }, [state, getWorldPoint, processPoint, createEntity, dispatch, pushUndo]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -710,7 +831,7 @@ export default function CADCanvas() {
         if (e.key === "a") { e.preventDefault(); dispatch({ type: "SELECT_ENTITIES", ids: state.entities.filter(en => en.visible && !en.locked).map(en => en.id) }); return; }
         if (e.key === "s") { e.preventDefault(); return; }
       }
-      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
+      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
       if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedEntityIds.length) { pushUndo(); dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds }); } return; }
       if (e.key === "T" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "trim" }); return; }
       if (e.key === "E" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "extend" }); return; }
@@ -719,6 +840,7 @@ export default function CADCanvas() {
       if (e.key === "R" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "rotate" }); return; }
       if (e.key === "S" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "scale" }); return; }
       if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "fillet" }); return; }
+      if (e.key === "M" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "mirror" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
@@ -754,6 +876,10 @@ function getCursor(tool: string, panning: boolean): string {
     case "rotate": return "crosshair";
     case "scale": return "crosshair";
     case "fillet": return "crosshair";
+    case "mirror": return "crosshair";
+    case "measure_distance": return "crosshair";
+    case "measure_area": return "crosshair";
+    case "measure_angle": return "crosshair";
     case "text": return "text";
     default: return "crosshair";
   }

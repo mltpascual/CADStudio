@@ -24,7 +24,7 @@ function StatusItem({ label, value, color }: { label: string; value: string; col
   return (
     <div className="flex items-center gap-1">
       <span className="text-[9px] text-muted-foreground/30 uppercase">{label}</span>
-      {color && <div className="w-2.5 h-2.5 rounded-sm border border-white/10" style={{ backgroundColor: color }} />}
+      {color && <div className="w-2.5 h-2.5 rounded-sm border border-border" style={{ backgroundColor: color }} />}
       {value && <span className="cad-mono text-foreground/60">{value}</span>}
     </div>
   );

@@ -9,7 +9,8 @@ const shortcuts = [
     { key: "M", action: "Move" }, { key: "Shift+C", action: "Copy" }, { key: "Shift+T", action: "Trim" },
     { key: "Shift+E", action: "Extend" }, { key: "O", action: "Offset" },
     { key: "Shift+R", action: "Rotate" }, { key: "Shift+S", action: "Scale" },
-    { key: "F", action: "Fillet/Chamfer" }, { key: "X", action: "Erase" },
+    { key: "F", action: "Fillet/Chamfer" }, { key: "Shift+M", action: "Mirror" },
+    { key: "X", action: "Erase" },
   ]},
   { category: "Edit", items: [
     { key: "Ctrl+Z", action: "Undo" }, { key: "Ctrl+Y", action: "Redo" },
@@ -28,7 +29,7 @@ export default function ShortcutsDialog() {
       <DialogTrigger asChild>
         <button className="cad-toolbar-btn" title="Keyboard Shortcuts"><Keyboard size={14} /></button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto" style={{ background: "var(--cad-panel-bg)", borderColor: "var(--cad-panel-border)" }}>
+      <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto bg-card text-card-foreground border-border">
         <DialogHeader><DialogTitle className="text-sm font-semibold">Keyboard Shortcuts</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
           {shortcuts.map(group => (

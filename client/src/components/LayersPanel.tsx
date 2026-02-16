@@ -26,8 +26,8 @@ export default function LayersPanel() {
       <div className="flex-1 overflow-y-auto">
         {state.layers.map(layer => (
           <div key={layer.id} className={`flex items-center gap-1.5 px-2 py-1.5 border-b cursor-pointer transition-colors ${layer.active ? "bg-primary/10 border-primary/20" : "hover:bg-accent/30 border-transparent"}`} style={{ borderBottomColor: "var(--cad-panel-border)" }} onClick={() => dispatch({ type: "SET_ACTIVE_LAYER", layerId: layer.id })}>
-            <div className="w-3 h-3 rounded-sm flex-shrink-0 border border-white/10" style={{ backgroundColor: layer.color }} />
-            <span className="text-xs flex-1 truncate" style={{ color: layer.active ? "#fff" : "var(--muted-foreground)" }}>{layer.name}</span>
+            <div className="w-3 h-3 rounded-sm flex-shrink-0 border border-border" style={{ backgroundColor: layer.color }} />
+            <span className="text-xs flex-1 truncate" style={{ color: layer.active ? "var(--foreground)" : "var(--muted-foreground)" }}>{layer.name}</span>
             <span className="cad-mono text-muted-foreground/40 text-[10px]">{entityCount[layer.id] || 0}</span>
             <button className="cad-toolbar-btn !w-5 !h-5" onClick={e => { e.stopPropagation(); dispatch({ type: "UPDATE_LAYER", id: layer.id, updates: { visible: !layer.visible } }); }} title={layer.visible ? "Hide" : "Show"}>
               {layer.visible ? <Eye size={11} /> : <EyeOff size={11} />}
