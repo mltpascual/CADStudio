@@ -6,6 +6,7 @@ import LayersPanel from "@/components/LayersPanel";
 import PropertiesPanel from "@/components/PropertiesPanel";
 import CommandLine from "@/components/CommandLine";
 import StatusBar from "@/components/StatusBar";
+import SnapToolbar from "@/components/SnapToolbar";
 
 function CADWorkspace() {
   const { state } = useCAD();
@@ -24,6 +25,7 @@ function CADWorkspace() {
         </div>
         {state.showLayers && <LayersPanel />}
       </div>
+      <SnapToolbar />
       <StatusBar />
     </div>
   );

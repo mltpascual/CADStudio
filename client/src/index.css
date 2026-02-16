@@ -212,6 +212,43 @@
     font-size: 11px;
     letter-spacing: -0.02em;
   }
+
+  /* Snap toolbar toggle buttons */
+  .snap-toggle-btn {
+    @apply flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors duration-150;
+    font-family: 'Fira Code', monospace;
+    font-size: 9px;
+    letter-spacing: 0.02em;
+    color: var(--muted-foreground);
+    opacity: 0.6;
+  }
+  .snap-toggle-btn:hover {
+    background: var(--accent);
+    color: var(--foreground);
+    opacity: 1;
+  }
+  .snap-toggle-btn.active {
+    color: var(--primary);
+    opacity: 1;
+  }
+  .snap-toggle-btn.active:hover {
+    background: oklch(from var(--primary) l c h / 0.15);
+  }
+  .snap-toggle-btn.master.active {
+    background: oklch(from var(--primary) l c h / 0.15);
+    color: var(--primary);
+    font-weight: 600;
+  }
+  .snap-toggle-btn.disabled {
+    opacity: 0.2;
+    pointer-events: none;
+  }
+  .snap-toggle-label {
+    font-family: 'Fira Code', monospace;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

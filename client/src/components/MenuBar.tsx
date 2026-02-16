@@ -2,9 +2,8 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import { exportToDXF, exportToSVG } from "@/lib/cad-utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuShortcut } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { FileDown, FileUp, Undo2, Redo2, Trash2, Copy, Grid3X3, Magnet, Layers, Terminal, PanelRight, CornerDownRight, Sun, Moon } from "lucide-react";
+import { FileDown, FileUp, Undo2, Redo2, Trash2, Copy, Grid3X3, Layers, Terminal, PanelRight, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import SnapSettingsDialog from "./SnapSettingsDialog";
 import ShortcutsDialog from "./ShortcutsDialog";
 
 const LOGO_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663343684150/bRJEUWLqFHNMPniX.png";
@@ -86,8 +85,8 @@ export default function MenuBar() {
           <DropdownMenuItem onClick={() => dispatch({ type: "SET_VIEW_STATE", viewState: { zoom: state.viewState.zoom * 0.67 } })}>Zoom Out</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => dispatch({ type: "SET_GRID_SETTINGS", settings: { visible: !state.gridSettings.visible } })}><Grid3X3 className="mr-2 h-3.5 w-3.5" />{state.gridSettings.visible ? "Hide Grid" : "Show Grid"}</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => dispatch({ type: "SET_SNAP_SETTINGS", settings: { enabled: !state.snapSettings.enabled } })}><Magnet className="mr-2 h-3.5 w-3.5" />{state.snapSettings.enabled ? "Disable Snap" : "Enable Snap"}</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => dispatch({ type: "TOGGLE_ORTHO" })}><CornerDownRight className="mr-2 h-3.5 w-3.5" />{state.orthoMode ? "Disable Ortho" : "Enable Ortho"}</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => dispatch({ type: "SET_SNAP_SETTINGS", settings: { enabled: !state.snapSettings.enabled } })}>{state.snapSettings.enabled ? "✓ " : "  "}Object Snap<DropdownMenuShortcut>F3</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuItem onClick={() => dispatch({ type: "TOGGLE_ORTHO" })}>{state.orthoMode ? "✓ " : "  "}Ortho Mode<DropdownMenuShortcut>F8</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => dispatch({ type: "TOGGLE_LAYERS" })}><Layers className="mr-2 h-3.5 w-3.5" />{state.showLayers ? "Hide Layers" : "Show Layers"}</DropdownMenuItem>
           <DropdownMenuItem onClick={() => dispatch({ type: "TOGGLE_PROPERTIES" })}><PanelRight className="mr-2 h-3.5 w-3.5" />{state.showProperties ? "Hide Properties" : "Show Properties"}</DropdownMenuItem>
@@ -99,10 +98,7 @@ export default function MenuBar() {
 
       <div className="flex items-center gap-0.5">
         <button className="cad-toolbar-btn" onClick={undo} title="Undo (Ctrl+Z)"><Undo2 size={14} /></button>
-        <button className={`cad-toolbar-btn ${state.orthoMode ? "active" : ""}`} onClick={() => dispatch({ type: "TOGGLE_ORTHO" })} title="Ortho Mode"><CornerDownRight size={14} /></button>
-        <button className={`cad-toolbar-btn ${state.snapSettings.enabled ? "active" : ""}`} onClick={() => dispatch({ type: "SET_SNAP_SETTINGS", settings: { enabled: !state.snapSettings.enabled } })} title="Object Snap"><Magnet size={14} /></button>
-        <button className={`cad-toolbar-btn ${state.gridSettings.visible ? "active" : ""}`} onClick={() => dispatch({ type: "SET_GRID_SETTINGS", settings: { visible: !state.gridSettings.visible } })} title="Grid Display"><Grid3X3 size={14} /></button>
-        <SnapSettingsDialog />
+        <button className="cad-toolbar-btn" onClick={redo} title="Redo (Ctrl+Y)"><Redo2 size={14} /></button>
         <ShortcutsDialog />
         <button
           className="cad-toolbar-btn"
