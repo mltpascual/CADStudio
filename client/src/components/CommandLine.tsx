@@ -13,6 +13,9 @@ const CMD: Record<string, ToolType> = {
   rotate: "rotate", ro: "rotate", scale: "scale", sc: "scale",
   fillet: "fillet", fi: "fillet", f: "fillet", chamfer: "fillet", ch: "fillet",
   mirror: "mirror", mi: "mirror",
+  hatch: "hatch", h: "hatch", fill: "hatch", bhatch: "hatch",
+  block: "block_group", b: "block_group", group: "block_group",
+  insert: "block_insert", i: "block_insert",
   dist: "measure_distance", distance: "measure_distance", measuredist: "measure_distance",
   area: "measure_area", measurearea: "measure_area",
   angle: "measure_angle", measureangle: "measure_angle",
@@ -42,7 +45,16 @@ export default function CommandLine() {
     else if (t === "snap") { dispatch({ type: "SET_SNAP_SETTINGS", settings: { enabled: !state.snapSettings.enabled } }); result = `Snap: ${!state.snapSettings.enabled ? "ON" : "OFF"}`; }
     else if (t.startsWith("zoom ")) { const v = parseFloat(t.split(" ")[1]); if (!isNaN(v)) { dispatch({ type: "SET_VIEW_STATE", viewState: { zoom: v / 100 } }); result = `Zoom: ${v}%`; } else result = "Invalid zoom"; }
     else if (t === "zoomfit" || t === "zf") { dispatch({ type: "SET_VIEW_STATE", viewState: { panX: 0, panY: 0, zoom: 1 } }); result = "Zoom to fit"; }
-    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, TEXT, DIM, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT"; }
+    else if (t === "explode") {
+      // Explode selected block references
+      const selected = state.entities.filter(e => state.selectedEntityIds.includes(e.id) && e.data.type === "blockref");
+      if (selected.length === 0) { result = "Select a block reference to explode"; }
+      else {
+        // Import handled in CADCanvas, just set result here
+        result = "Use the canvas to explode blocks (select block, type EXPLODE)";
+      }
+    }
+    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, TEXT, DIM, HATCH, BLOCK, INSERT, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT"; }
     else result = `Unknown: ${t}`;
     dispatch({ type: "ADD_COMMAND", entry: { command: cmd.trim(), timestamp: Date.now(), result } });
     setInput(""); setHistIdx(-1);

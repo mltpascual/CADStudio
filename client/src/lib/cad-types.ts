@@ -10,7 +10,10 @@ export type ToolType =
   | "move" | "rotate" | "scale" | "mirror"
   | "trim" | "extend" | "offset" | "fillet"
   | "copy" | "erase" | "pan" | "zoom"
-  | "measure_distance" | "measure_area" | "measure_angle";
+  | "measure_distance" | "measure_area" | "measure_angle"
+  | "hatch" | "block_group" | "block_insert";
+
+export type HatchPattern = "solid" | "crosshatch" | "diagonal" | "dots" | "horizontal" | "vertical" | "brick";
 
 export type LineStyle = "solid" | "dashed" | "dotted" | "dashdot";
 
@@ -22,10 +25,13 @@ export interface PolylineData { type: "polyline"; points: Point[]; closed: boole
 export interface EllipseData { type: "ellipse"; center: Point; radiusX: number; radiusY: number; rotation: number; }
 export interface TextData { type: "text"; position: Point; content: string; fontSize: number; rotation: number; }
 export interface DimensionData { type: "dimension"; start: Point; end: Point; offset: number; }
+export interface HatchData { type: "hatch"; boundary: Point[]; pattern: HatchPattern; patternScale: number; patternAngle: number; fillColor: string; fillOpacity: number; }
+export interface BlockRefData { type: "blockref"; blockId: string; insertPoint: Point; scaleX: number; scaleY: number; rotation: number; }
 
 export type EntityData =
   | LineData | CircleData | ArcData | RectangleData
-  | PolylineData | EllipseData | TextData | DimensionData;
+  | PolylineData | EllipseData | TextData | DimensionData
+  | HatchData | BlockRefData;
 
 export interface CADEntity {
   id: string;
@@ -81,6 +87,13 @@ export interface DrawingState {
   previewPoint: Point | null;
 }
 
+export interface BlockDefinition {
+  id: string;
+  name: string;
+  entities: CADEntity[];
+  basePoint: Point;
+}
+
 export interface CADState {
   entities: CADEntity[];
   layers: Layer[];
@@ -101,6 +114,10 @@ export interface CADState {
   showCommandLine: boolean;
   undoStack: CADEntity[][];
   redoStack: CADEntity[][];
+  blocks: BlockDefinition[];
+  activeHatchPattern: HatchPattern;
+  activeHatchScale: number;
+  activeHatchAngle: number;
 }
 
 export const ENTITY_COLORS = [

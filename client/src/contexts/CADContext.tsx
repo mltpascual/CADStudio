@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, type ReactNode, type Dispatch } from "react";
-import type { CADState, CADEntity, Layer, ToolType, LineStyle, ViewState, GridSettings, SnapSettings, CommandEntry } from "@/lib/cad-types";
+import type { CADState, CADEntity, Layer, ToolType, LineStyle, ViewState, GridSettings, SnapSettings, CommandEntry, BlockDefinition, HatchPattern } from "@/lib/cad-types";
 import { DEFAULT_LAYERS } from "@/lib/cad-types";
 
 type Action =
@@ -31,7 +31,12 @@ type Action =
   | { type: "REDO" }
   | { type: "CLEAR_ALL" }
   | { type: "LOAD_ENTITIES"; entities: CADEntity[] }
-  | { type: "PUSH_UNDO" };
+  | { type: "PUSH_UNDO" }
+  | { type: "ADD_BLOCK"; block: BlockDefinition }
+  | { type: "REMOVE_BLOCK"; id: string }
+  | { type: "SET_HATCH_PATTERN"; pattern: HatchPattern }
+  | { type: "SET_HATCH_SCALE"; scale: number }
+  | { type: "SET_HATCH_ANGLE"; angle: number };
 
 const initialState: CADState = {
   entities: [],
@@ -53,6 +58,10 @@ const initialState: CADState = {
   showCommandLine: true,
   undoStack: [],
   redoStack: [],
+  blocks: [],
+  activeHatchPattern: "crosshatch" as HatchPattern,
+  activeHatchScale: 1,
+  activeHatchAngle: 0,
 };
 
 function reducer(state: CADState, action: Action): CADState {
@@ -86,6 +95,11 @@ function reducer(state: CADState, action: Action): CADState {
     case "REDO": { if (!state.redoStack.length) return state; const next = state.redoStack[state.redoStack.length - 1]; return { ...state, entities: next, redoStack: state.redoStack.slice(0, -1), undoStack: [...state.undoStack, [...state.entities]], selectedEntityIds: [] }; }
     case "CLEAR_ALL": return { ...state, entities: [], selectedEntityIds: [], undoStack: [...state.undoStack, [...state.entities]], redoStack: [] };
     case "LOAD_ENTITIES": return { ...state, entities: action.entities, selectedEntityIds: [], undoStack: [], redoStack: [] };
+    case "ADD_BLOCK": return { ...state, blocks: [...state.blocks, action.block] };
+    case "REMOVE_BLOCK": return { ...state, blocks: state.blocks.filter(b => b.id !== action.id) };
+    case "SET_HATCH_PATTERN": return { ...state, activeHatchPattern: action.pattern };
+    case "SET_HATCH_SCALE": return { ...state, activeHatchScale: action.scale };
+    case "SET_HATCH_ANGLE": return { ...state, activeHatchAngle: action.angle };
     default: return state;
   }
 }

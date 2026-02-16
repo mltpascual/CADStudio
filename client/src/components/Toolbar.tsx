@@ -2,7 +2,7 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import type { ToolType } from "@/lib/cad-types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend, FlipHorizontal2, RulerIcon, Triangle, Compass } from "lucide-react";
+import { MousePointer2, Minus, Circle, Square, Spline, Type, Ruler, Move, RotateCw, Eraser, Hand, Maximize2, ArrowUpRight, Scissors, ArrowRightToLine, Copy, Layers, Scaling, Blend, FlipHorizontal2, RulerIcon, Triangle, Compass, PaintBucket, Group, PackagePlus } from "lucide-react";
 
 interface ToolItem { id: ToolType; label: string; shortcut: string; icon: React.ReactNode; }
 
@@ -18,6 +18,11 @@ const drawTools: ToolItem[] = [
 const annotateTools: ToolItem[] = [
   { id: "text", label: "Text", shortcut: "T", icon: <Type size={16} /> },
   { id: "dimension", label: "Dimension", shortcut: "D", icon: <Ruler size={16} /> },
+  { id: "hatch", label: "Hatch/Fill", shortcut: "H", icon: <PaintBucket size={16} /> },
+];
+const blockTools: ToolItem[] = [
+  { id: "block_group", label: "Create Block", shortcut: "Shift+B", icon: <Group size={16} /> },
+  { id: "block_insert", label: "Insert Block", shortcut: "Shift+I", icon: <PackagePlus size={16} /> },
 ];
 const modifyTools: ToolItem[] = [
   { id: "move", label: "Move", shortcut: "M", icon: <Move size={16} /> },
@@ -70,6 +75,8 @@ export default function Toolbar() {
       {renderGroup(annotateTools, "Note")}
       <Separator className="w-6 my-1 opacity-20" />
       {renderGroup(modifyTools, "Edit")}
+      <Separator className="w-6 my-1 opacity-20" />
+      {renderGroup(blockTools, "Block")}
       <Separator className="w-6 my-1 opacity-20" />
       {renderGroup(measureTools, "Meas")}
       <Separator className="w-6 my-1 opacity-20" />

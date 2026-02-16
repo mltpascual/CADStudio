@@ -10,6 +10,9 @@ import { rotateEntityData, scaleEntityData } from "@/lib/rotate-scale-utils";
 import { filletEntities, type FilletMode } from "@/lib/fillet-utils";
 import { mirrorEntities } from "@/lib/mirror-utils";
 import { measureDistance, measureArea, measureAngle, drawDistanceOverlay, drawAreaOverlay, drawAngleOverlay, type MeasureResult } from "@/lib/measure-utils";
+import { getEntityBoundary, createHatchEntity, drawHatchPattern } from "@/lib/hatch-utils";
+import { createBlockDefinition, createBlockRefEntity, getBlockRefEntities, explodeBlockRef } from "@/lib/block-utils";
+import type { BlockRefData } from "@/lib/cad-types";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,6 +31,8 @@ export default function CADCanvas() {
   const mirrorAxisStart = useRef<Point | null>(null);
   const measurePoints = useRef<Point[]>([]);
   const [measureResult, setMeasureResult] = useState<MeasureResult | null>(null);
+  const hatchBoundaryPts = useRef<Point[]>([]);
+  const blockInsertId = useRef<string | null>(null);
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => {
     const canvas = canvasRef.current;
@@ -126,6 +131,16 @@ export default function CADCanvas() {
       if (layer && !layer.visible) continue;
       const isSelected = state.selectedEntityIds.includes(entity.id);
       drawEntity(ctx, entity, zoom, panX, panY, cx, cy, isSelected);
+      // Render block reference child entities
+      if (entity.data.type === "blockref") {
+        const blockDef = state.blocks.find(b => b.id === (entity.data as BlockRefData).blockId);
+        if (blockDef) {
+          const childEntities = getBlockRefEntities(blockDef, entity.data as BlockRefData);
+          for (const child of childEntities) {
+            drawEntity(ctx, child, zoom, panX, panY, cx, cy, isSelected);
+          }
+        }
+      }
     }
     ctx.restore();
 
@@ -749,6 +764,92 @@ export default function CADCanvas() {
       return;
     }
 
+    if (tool === "hatch") {
+      const tolerance = 8 / state.viewState.zoom;
+      // Check if user clicked on a closed entity to auto-detect boundary
+      for (let i = state.entities.length - 1; i >= 0; i--) {
+        const ent = state.entities[i];
+        if (!ent.visible || ent.locked) continue;
+        const layer = state.layers.find(l => l.id === ent.layerId);
+        if (layer && (!layer.visible || layer.locked)) continue;
+        if (hitTestEntity(ent, pt, tolerance)) {
+          const boundary = getEntityBoundary(ent);
+          if (boundary) {
+            pushUndo();
+            const hatchEnt = createHatchEntity(
+              boundary,
+              state.activeHatchPattern,
+              state.activeHatchScale,
+              state.activeHatchAngle,
+              state.activeColor,
+              state.activeLayerId
+            );
+            dispatch({ type: "ADD_ENTITY", entity: hatchEnt });
+            dispatch({ type: "ADD_COMMAND", entry: { command: "HATCH", timestamp: Date.now(), result: `Hatched ${ent.type} with ${state.activeHatchPattern} pattern` } });
+          } else {
+            dispatch({ type: "ADD_COMMAND", entry: { command: "HATCH", timestamp: Date.now(), result: "Entity is not closed. Use rectangle, circle, ellipse, or closed polyline." } });
+          }
+          return;
+        }
+      }
+      // If no entity clicked, allow manual boundary drawing
+      hatchBoundaryPts.current = [...hatchBoundaryPts.current, pt];
+      if (hatchBoundaryPts.current.length >= 3) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "HATCH", timestamp: Date.now(), result: `Boundary point ${hatchBoundaryPts.current.length}. Right-click to finish.` } });
+      } else {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "HATCH", timestamp: Date.now(), result: `Boundary point ${hatchBoundaryPts.current.length}. Click more points (min 3) or click a closed entity.` } });
+      }
+      dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: hatchBoundaryPts.current[0], currentPoints: hatchBoundaryPts.current, previewPoint: pt } });
+      return;
+    }
+
+    if (tool === "block_group") {
+      if (state.selectedEntityIds.length < 1) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "BLOCK", timestamp: Date.now(), result: "Select entities first, then use Block/Group" } });
+        return;
+      }
+      const name = prompt("Enter block name:") || `Block_${state.blocks.length + 1}`;
+      const selected = state.entities.filter(e => state.selectedEntityIds.includes(e.id));
+      const block = createBlockDefinition(name, selected);
+      pushUndo();
+      dispatch({ type: "ADD_BLOCK", block });
+      // Remove original entities and replace with a block reference
+      dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds });
+      const ref = createBlockRefEntity(block.id, block.basePoint, 1, 1, 0, state.activeLayerId, state.activeColor);
+      dispatch({ type: "ADD_ENTITY", entity: ref });
+      dispatch({ type: "ADD_COMMAND", entry: { command: "BLOCK", timestamp: Date.now(), result: `Created block "${name}" with ${selected.length} entities` } });
+      return;
+    }
+
+    if (tool === "block_insert") {
+      if (state.blocks.length === 0) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "INSERT", timestamp: Date.now(), result: "No blocks defined. Create a block first." } });
+        return;
+      }
+      if (!blockInsertId.current) {
+        // Show block selection
+        const blockList = state.blocks.map((b, i) => `${i + 1}. ${b.name}`).join("\n");
+        const choice = prompt(`Select block to insert:\n${blockList}\n\nEnter number:`);
+        if (!choice) return;
+        const idx = parseInt(choice) - 1;
+        if (idx < 0 || idx >= state.blocks.length) {
+          dispatch({ type: "ADD_COMMAND", entry: { command: "INSERT", timestamp: Date.now(), result: "Invalid block number" } });
+          return;
+        }
+        blockInsertId.current = state.blocks[idx].id;
+        dispatch({ type: "ADD_COMMAND", entry: { command: "INSERT", timestamp: Date.now(), result: `Block "${state.blocks[idx].name}" selected. Click to place.` } });
+        return;
+      }
+      // Place the block
+      pushUndo();
+      const ref = createBlockRefEntity(blockInsertId.current, pt, 1, 1, 0, state.activeLayerId, state.activeColor);
+      dispatch({ type: "ADD_ENTITY", entity: ref });
+      const block = state.blocks.find(b => b.id === blockInsertId.current);
+      dispatch({ type: "ADD_COMMAND", entry: { command: "INSERT", timestamp: Date.now(), result: `Inserted block "${block?.name}" at (${pt.x.toFixed(2)}, ${pt.y.toFixed(2)})` } });
+      blockInsertId.current = null;
+      return;
+    }
+
     if (tool === "measure_angle") {
       measurePoints.current = [...measurePoints.current, pt];
       if (measurePoints.current.length === 1) {
@@ -811,7 +912,21 @@ export default function CADCanvas() {
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    if (state.activeTool === "polyline" && state.drawingState.isDrawing && state.drawingState.currentPoints.length >= 2) {
+    if (state.activeTool === "hatch" && hatchBoundaryPts.current.length >= 3) {
+      pushUndo();
+      const hatchEnt = createHatchEntity(
+        hatchBoundaryPts.current,
+        state.activeHatchPattern,
+        state.activeHatchScale,
+        state.activeHatchAngle,
+        state.activeColor,
+        state.activeLayerId
+      );
+      dispatch({ type: "ADD_ENTITY", entity: hatchEnt });
+      dispatch({ type: "ADD_COMMAND", entry: { command: "HATCH", timestamp: Date.now(), result: `Created hatch with ${hatchBoundaryPts.current.length} boundary points` } });
+      hatchBoundaryPts.current = [];
+      dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, currentPoints: [], previewPoint: null } });
+    } else if (state.activeTool === "polyline" && state.drawingState.isDrawing && state.drawingState.currentPoints.length >= 2) {
       pushUndo();
       const ent = createEntity({ type: "polyline", points: state.drawingState.currentPoints, closed: false });
       dispatch({ type: "ADD_ENTITY", entity: ent });
@@ -831,7 +946,7 @@ export default function CADCanvas() {
         if (e.key === "a") { e.preventDefault(); dispatch({ type: "SELECT_ENTITIES", ids: state.entities.filter(en => en.visible && !en.locked).map(en => en.id) }); return; }
         if (e.key === "s") { e.preventDefault(); return; }
       }
-      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
+      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); hatchBoundaryPts.current = []; blockInsertId.current = null; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
       if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedEntityIds.length) { pushUndo(); dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds }); } return; }
       if (e.key === "T" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "trim" }); return; }
       if (e.key === "E" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "extend" }); return; }
@@ -840,6 +955,9 @@ export default function CADCanvas() {
       if (e.key === "R" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "rotate" }); return; }
       if (e.key === "S" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "scale" }); return; }
       if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "fillet" }); return; }
+      if (e.key === "h" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "hatch" }); return; }
+      if (e.key === "B" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "block_group" }); return; }
+      if (e.key === "I" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "block_insert" }); return; }
       if (e.key === "M" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "mirror" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
@@ -877,6 +995,9 @@ function getCursor(tool: string, panning: boolean): string {
     case "scale": return "crosshair";
     case "fillet": return "crosshair";
     case "mirror": return "crosshair";
+    case "hatch": return "crosshair";
+    case "block_group": return "crosshair";
+    case "block_insert": return "crosshair";
     case "measure_distance": return "crosshair";
     case "measure_area": return "crosshair";
     case "measure_angle": return "crosshair";
@@ -920,21 +1041,62 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: CADEntity, zoom: numb
       const off = d.offset * zoom;
       ctx.strokeStyle = selected ? "#3b82f6" : "#f59e0b";
       ctx.lineWidth = 0.5;
-      // Extension lines
       ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y - off); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x, e.y - off); ctx.stroke();
-      // Dimension line
       ctx.beginPath(); ctx.moveTo(s.x, s.y - off); ctx.lineTo(e.x, e.y - off); ctx.stroke();
-      // Arrows
       const arrowSize = 6;
       const angle = Math.atan2(0, e.x - s.x);
       drawArrow(ctx, s.x, s.y - off, angle, arrowSize);
       drawArrow(ctx, e.x, e.y - off, angle + Math.PI, arrowSize);
-      // Text
       ctx.fillStyle = selected ? "#3b82f6" : "#f59e0b";
       ctx.font = `${Math.max(10, 12 * zoom)}px 'Fira Code'`;
       ctx.textAlign = "center"; ctx.textBaseline = "bottom";
       ctx.fillText(dist.toFixed(2), (s.x + e.x) / 2, (s.y + e.y) / 2 - off - 4);
+      break;
+    }
+    case "hatch": {
+      const canvasEl = ctx.canvas;
+      drawHatchPattern(
+        ctx, d.boundary, d.pattern, d.patternScale, d.patternAngle,
+        selected ? "#3b82f6" : d.fillColor, d.fillOpacity,
+        zoom, panX, panY, canvasEl.width / (window.devicePixelRatio || 1), canvasEl.height / (window.devicePixelRatio || 1)
+      );
+      // Draw boundary outline
+      if (selected) {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        const bp0 = toScreen(d.boundary[0]);
+        ctx.moveTo(bp0.x, bp0.y);
+        for (let i = 1; i < d.boundary.length; i++) {
+          const bp = toScreen(d.boundary[i]);
+          ctx.lineTo(bp.x, bp.y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      break;
+    }
+    case "blockref": {
+      // Block references are rendered by expanding their child entities
+      // The parent canvas loop handles this via getBlockRefEntities
+      // Draw a small indicator at insert point
+      const ip = toScreen(d.insertPoint);
+      ctx.strokeStyle = selected ? "#3b82f6" : entity.color;
+      ctx.lineWidth = 1;
+      const sz = 6;
+      ctx.beginPath();
+      ctx.moveTo(ip.x - sz, ip.y); ctx.lineTo(ip.x + sz, ip.y);
+      ctx.moveTo(ip.x, ip.y - sz); ctx.lineTo(ip.x, ip.y + sz);
+      ctx.stroke();
+      // Draw diamond marker
+      ctx.beginPath();
+      ctx.moveTo(ip.x, ip.y - sz); ctx.lineTo(ip.x + sz, ip.y);
+      ctx.lineTo(ip.x, ip.y + sz); ctx.lineTo(ip.x - sz, ip.y);
+      ctx.closePath();
+      ctx.stroke();
       break;
     }
   }
@@ -960,6 +1122,8 @@ function moveEntityData(data: EntityData, dx: number, dy: number): EntityData | 
     case "ellipse": return { ...data, center: { x: data.center.x + dx, y: data.center.y + dy } };
     case "text": return { ...data, position: { x: data.position.x + dx, y: data.position.y + dy } };
     case "dimension": return { ...data, start: { x: data.start.x + dx, y: data.start.y + dy }, end: { x: data.end.x + dx, y: data.end.y + dy } };
+    case "hatch": return { ...data, boundary: data.boundary.map(p => ({ x: p.x + dx, y: p.y + dy })) };
+    case "blockref": return { ...data, insertPoint: { x: data.insertPoint.x + dx, y: data.insertPoint.y + dy } };
     default: return null;
   }
 }

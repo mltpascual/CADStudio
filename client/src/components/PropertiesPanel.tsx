@@ -1,7 +1,18 @@
 import { useCAD, useCADActions } from "@/contexts/CADContext";
 import { ENTITY_COLORS, LINE_WIDTHS } from "@/lib/cad-types";
+import type { HatchPattern } from "@/lib/cad-types";
 import { distance, formatCoordinate, formatDistance, formatAngle, angleDeg } from "@/lib/cad-utils";
 import { Separator } from "@/components/ui/separator";
+
+const HATCH_PATTERNS: { id: HatchPattern; label: string }[] = [
+  { id: "crosshatch", label: "Crosshatch" },
+  { id: "diagonal", label: "Diagonal" },
+  { id: "horizontal", label: "Horizontal" },
+  { id: "vertical", label: "Vertical" },
+  { id: "dots", label: "Dots" },
+  { id: "brick", label: "Brick" },
+  { id: "solid", label: "Solid" },
+];
 
 export default function PropertiesPanel() {
   const { state } = useCAD();
@@ -43,6 +54,12 @@ export default function PropertiesPanel() {
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground/60 block mb-1">Active Layer</label>
           <select value={state.activeLayerId} onChange={e => dispatch({ type: "SET_ACTIVE_LAYER", layerId: e.target.value })} className="w-full bg-input border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary/50">
             {state.layers.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground/60 block mb-1">Hatch Pattern</label>
+          <select value={state.activeHatchPattern} onChange={e => dispatch({ type: "SET_HATCH_PATTERN", pattern: e.target.value as HatchPattern })} className="w-full bg-input border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary/50">
+            {HATCH_PATTERNS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </div>
       </div>
@@ -101,6 +118,20 @@ export default function PropertiesPanel() {
             </>}
             {single.data.type === "dimension" && <>
               <PropRow label="Distance" value={formatDistance(distance(single.data.start, single.data.end))} />
+            </>}
+            {single.data.type === "hatch" && <>
+              <PropRow label="Pattern" value={single.data.pattern} />
+              <PropRow label="Boundary Pts" value={`${single.data.boundary.length}`} />
+              <PropRow label="Scale" value={`${single.data.patternScale}`} />
+              <PropRow label="Angle" value={`${single.data.patternAngle}°`} />
+            </>}
+            {single.data.type === "blockref" && <>
+              <PropRow label="Block ID" value={single.data.blockId.slice(0, 12)} />
+              <PropRow label="Insert X" value={formatCoordinate(single.data.insertPoint.x)} />
+              <PropRow label="Insert Y" value={formatCoordinate(single.data.insertPoint.y)} />
+              <PropRow label="Scale X" value={`${single.data.scaleX}`} />
+              <PropRow label="Scale Y" value={`${single.data.scaleY}`} />
+              <PropRow label="Rotation" value={`${single.data.rotation}°`} />
             </>}
           </div>
         ) : null}

@@ -10,7 +10,8 @@ const shortcuts = [
     { key: "Shift+E", action: "Extend" }, { key: "O", action: "Offset" },
     { key: "Shift+R", action: "Rotate" }, { key: "Shift+S", action: "Scale" },
     { key: "F", action: "Fillet/Chamfer" }, { key: "Shift+M", action: "Mirror" },
-    { key: "X", action: "Erase" },
+    { key: "H", action: "Hatch/Fill" }, { key: "Shift+B", action: "Create Block" },
+    { key: "Shift+I", action: "Insert Block" }, { key: "X", action: "Erase" },
   ]},
   { category: "Edit", items: [
     { key: "Ctrl+Z", action: "Undo" }, { key: "Ctrl+Y", action: "Redo" },
