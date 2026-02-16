@@ -38,7 +38,8 @@ type Action =
   | { type: "SET_HATCH_SCALE"; scale: number }
   | { type: "SET_HATCH_ANGLE"; angle: number }
   | { type: "SET_POLAR_TRACKING"; settings: Partial<PolarTrackingSettings> }
-  | { type: "TOGGLE_POLAR_TRACKING" };
+  | { type: "TOGGLE_POLAR_TRACKING" }
+  | { type: "TOGGLE_DYNAMIC_INPUT" };
 
 const initialState: CADState = {
   entities: [],
@@ -65,6 +66,7 @@ const initialState: CADState = {
   activeHatchScale: 1,
   activeHatchAngle: 0,
   polarTracking: { enabled: false, increment: 45, additionalAngles: [], trackFromLastPoint: true },
+  dynamicInputEnabled: true,
 };
 
 function reducer(state: CADState, action: Action): CADState {
@@ -105,6 +107,7 @@ function reducer(state: CADState, action: Action): CADState {
     case "SET_HATCH_ANGLE": return { ...state, activeHatchAngle: action.angle };
     case "SET_POLAR_TRACKING": return { ...state, polarTracking: { ...state.polarTracking, ...action.settings } };
     case "TOGGLE_POLAR_TRACKING": return { ...state, polarTracking: { ...state.polarTracking, enabled: !state.polarTracking.enabled } };
+    case "TOGGLE_DYNAMIC_INPUT": return { ...state, dynamicInputEnabled: !state.dynamicInputEnabled };
     default: return state;
   }
 }

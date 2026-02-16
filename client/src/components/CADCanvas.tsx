@@ -16,6 +16,7 @@ import { createRectangularArray, createPolarArray, getEntitiesCentroid } from "@
 import { drawSpline, drawSplinePreview, hitTestSpline, moveSpline } from "@/lib/spline-utils";
 import { drawXLine, drawRay, moveXLine, moveRay } from "@/lib/xline-utils";
 import type { BlockRefData, SplineData, XLineData, RayData } from "@/lib/cad-types";
+import DynamicInput from "@/components/DynamicInput";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -23,6 +24,8 @@ export default function CADCanvas() {
   const { state } = useCAD();
   const { dispatch, pushUndo } = useCADActions();
   const [mouseWorld, setMouseWorld] = useState<Point>({ x: 0, y: 0 });
+  const [mouseScreen, setMouseScreen] = useState<Point>({ x: 0, y: 0 });
+  const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
   const [snapPoint, setSnapPoint] = useState<{ point: Point; type: string } | null>(null);
   const isPanning = useRef(false);
   const panStart = useRef<Point>({ x: 0, y: 0 });
@@ -1086,6 +1089,11 @@ export default function CADCanvas() {
     const raw = getWorldPoint(e);
     const pt = processPoint(raw);
     setMouseWorld(pt);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMouseScreen({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      if (!canvasRect || canvasRect.width !== rect.width || canvasRect.height !== rect.height) setCanvasRect(rect);
+    }
 
     if (state.drawingState.isDrawing) {
       dispatch({ type: "SET_DRAWING_STATE", state: { previewPoint: pt } });
@@ -1189,12 +1197,41 @@ export default function CADCanvas() {
       if (e.key === "F8") { e.preventDefault(); dispatch({ type: "TOGGLE_ORTHO" }); return; }
       if (e.key === "F9") { e.preventDefault(); dispatch({ type: "SET_GRID_SETTINGS", settings: { snapToGrid: !state.gridSettings.snapToGrid } }); return; }
       if (e.key === "F10") { e.preventDefault(); dispatch({ type: "TOGGLE_POLAR_TRACKING" }); return; }
+      if (e.key === "F12") { e.preventDefault(); dispatch({ type: "TOGGLE_DYNAMIC_INPUT" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [state.entities, state.selectedEntityIds, dispatch, pushUndo]);
+
+  const handleDynamicInputSubmit = useCallback((value: { distance?: number; angle?: number; x?: number; y?: number }) => {
+    if (value.x !== undefined || value.y !== undefined) {
+      // Absolute coordinate input — simulate a click at that world position
+      const pt: Point = { x: value.x ?? mouseWorld.x, y: value.y ?? mouseWorld.y };
+      // Dispatch as if user clicked that point
+      const fakeEvent = { clientX: 0, clientY: 0, button: 0, preventDefault: () => {}, stopPropagation: () => {} } as any;
+      // Set mouse world to the target and trigger drawing state
+      setMouseWorld(pt);
+      if (!state.drawingState.isDrawing) {
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, previewPoint: pt } });
+      }
+    } else if (value.distance !== undefined || value.angle !== undefined) {
+      // Relative distance/angle from start point
+      const sp = state.drawingState.startPoint;
+      if (!sp) return;
+      const dx = mouseWorld.x - sp.x;
+      const dy = mouseWorld.y - sp.y;
+      const currentDist = Math.sqrt(dx * dx + dy * dy);
+      const currentAngle = ((Math.atan2(-dy, dx) * 180 / Math.PI) + 360) % 360;
+      const dist = value.distance ?? currentDist;
+      const angleDeg = value.angle ?? currentAngle;
+      const angleRad = angleDeg * Math.PI / 180;
+      const pt: Point = { x: sp.x + dist * Math.cos(angleRad), y: sp.y - dist * Math.sin(angleRad) };
+      setMouseWorld(pt);
+      dispatch({ type: "SET_DRAWING_STATE", state: { previewPoint: pt } });
+    }
+  }, [mouseWorld, state.drawingState, dispatch]);
 
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: getCursor(state.activeTool, isPanning.current) }}>
@@ -1206,6 +1243,12 @@ export default function CADCanvas() {
         onMouseUp={handleMouseUp}
         onWheel={handleWheel}
         onContextMenu={handleContextMenu}
+      />
+      <DynamicInput
+        mouseScreenPos={mouseScreen}
+        mouseWorldPos={mouseWorld}
+        onSubmit={handleDynamicInputSubmit}
+        canvasRect={canvasRect ? { width: canvasRect.width, height: canvasRect.height } as DOMRect : null}
       />
     </div>
   );

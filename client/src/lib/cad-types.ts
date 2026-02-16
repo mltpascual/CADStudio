@@ -131,6 +131,7 @@ export interface CADState {
   activeHatchScale: number;
   activeHatchAngle: number;
   polarTracking: PolarTrackingSettings;
+  dynamicInputEnabled: boolean;
 }
 
 export const ENTITY_COLORS = [

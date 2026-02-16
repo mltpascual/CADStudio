@@ -86,6 +86,7 @@ const groups: ShortcutGroup[] = [
       { key: "F8", label: "Toggle Ortho", color: "#ec4899" },
       { key: "F9", label: "Grid Snap", color: "#ec4899" },
       { key: "F10", label: "Polar Track", color: "#ec4899" },
+      { key: "F12", label: "Dynamic Input", color: "#ec4899" },
     ],
   },
 ];

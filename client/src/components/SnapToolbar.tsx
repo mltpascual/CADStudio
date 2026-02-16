@@ -128,6 +128,18 @@ const snapModes: SnapMode[] = [
   { key: "gridSnap", label: "Grid Snap", shortLabel: "GRID", icon: <GridSnapIcon /> },
 ];
 
+function DynIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2">
+      <rect x="1" y="4" width="12" height="6" rx="1" />
+      <line x1="4" y1="6" x2="4" y2="8" />
+      <line x1="6" y1="6" x2="6" y2="8" />
+      <circle cx="9" cy="7" r="0.5" fill="currentColor" />
+      <circle cx="10.5" cy="7" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
 export default function SnapToolbar() {
   const { state } = useCAD();
   const { dispatch } = useCADActions();
@@ -302,6 +314,22 @@ export default function SnapToolbar() {
           </div>
         </PopoverContent>
       </Popover>
+
+      {/* Dynamic Input toggle */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className={`snap-toggle-btn ${state.dynamicInputEnabled ? "active" : ""}`}
+            onClick={() => dispatch({ type: "TOGGLE_DYNAMIC_INPUT" })}
+          >
+            <DynIcon />
+            <span className="snap-toggle-label">DYN</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {state.dynamicInputEnabled ? "Disable" : "Enable"} Dynamic Input (F12)
+        </TooltipContent>
+      </Tooltip>
 
       <div className="flex-1" />
 
