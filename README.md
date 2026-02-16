@@ -19,7 +19,10 @@ A full-featured AutoCAD clone web application built with React, TypeScript, and 
 ### Modify Tools
 - **Select** (V) — Click to select, Shift+click for multi-select, box selection
 - **Move** (M) — Move selected entities by base point + displacement
+- **Copy** (Shift+C) — Duplicate selected entities with base point + destination
 - **Trim** (Shift+T) — Trim entities at intersection points (like AutoCAD)
+- **Extend** (Shift+E) — Extend lines/arcs/polylines to the nearest boundary entity
+- **Offset** (O) — Create parallel copies of entities at a specified distance
 - **Erase** (X) — Click to delete entities
 
 ### Precision Features
@@ -80,7 +83,10 @@ pnpm run build
 | T | Text tool |
 | D | Dimension tool |
 | M | Move tool |
+| Shift+C | Copy tool |
 | Shift+T | Trim tool |
+| Shift+E | Extend tool |
+| O | Offset tool |
 | X | Erase tool |
 | Ctrl+Z | Undo |
 | Ctrl+Y | Redo |
@@ -95,6 +101,7 @@ pnpm run build
 Type commands directly in the command line at the bottom:
 
 - `LINE`, `CIRCLE`, `ARC`, `RECT`, `POLYLINE`, `ELLIPSE`, `TEXT`, `DIM`
+- `COPY`, `EXTEND`, `OFFSET`
 - `MOVE`, `TRIM`, `ERASE`
 - `UNDO`, `REDO`
 - `ORTHO`, `GRID`, `SNAP`

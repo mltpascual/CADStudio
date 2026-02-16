@@ -9,7 +9,7 @@ export type ToolType =
   | "polyline" | "ellipse" | "text" | "dimension"
   | "move" | "rotate" | "scale" | "mirror"
   | "trim" | "extend" | "offset" | "fillet"
-  | "erase" | "pan" | "zoom";
+  | "copy" | "erase" | "pan" | "zoom";
 
 export type LineStyle = "solid" | "dashed" | "dotted" | "dashdot";
 

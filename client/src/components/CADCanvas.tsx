@@ -3,6 +3,9 @@ import { useCAD, useCADActions } from "@/contexts/CADContext";
 import type { Point, CADEntity, EntityData } from "@/lib/cad-types";
 import { generateId, distance, hitTestEntity, findSnapPoint, entitiesInBox, getLineDash, snapToAngle, snapToGridPoint } from "@/lib/cad-utils";
 import { trimEntity } from "@/lib/trim-utils";
+import { extendEntity } from "@/lib/extend-utils";
+import { copyEntities } from "@/lib/copy-utils";
+import { offsetEntity } from "@/lib/offset-utils";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -15,6 +18,8 @@ export default function CADCanvas() {
   const panStart = useRef<Point>({ x: 0, y: 0 });
   const selBoxStart = useRef<Point | null>(null);
   const selBoxEnd = useRef<Point | null>(null);
+  const offsetEntityRef = useRef<CADEntity | null>(null);
+  const offsetDistRef = useRef<number | null>(null);
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => {
     const canvas = canvasRef.current;
@@ -425,6 +430,86 @@ export default function CADCanvas() {
       return;
     }
 
+    if (tool === "extend") {
+      const tolerance = 8 / state.viewState.zoom;
+      for (let i = state.entities.length - 1; i >= 0; i--) {
+        const ent = state.entities[i];
+        if (!ent.visible || ent.locked) continue;
+        const layer = state.layers.find(l => l.id === ent.layerId);
+        if (layer && (!layer.visible || layer.locked)) continue;
+        if (hitTestEntity(ent, pt, tolerance)) {
+          const result = extendEntity(pt, ent, state.entities, tolerance);
+          if (result) {
+            pushUndo();
+            dispatch({ type: "UPDATE_ENTITY", id: result.entityId, updates: { data: result.newData } });
+            dispatch({ type: "ADD_COMMAND", entry: { command: "EXTEND", timestamp: Date.now(), result: `Extended ${ent.type}` } });
+          } else {
+            dispatch({ type: "ADD_COMMAND", entry: { command: "EXTEND", timestamp: Date.now(), result: "No boundary found to extend to" } });
+          }
+          break;
+        }
+      }
+      return;
+    }
+
+    if (tool === "copy") {
+      if (state.selectedEntityIds.length === 0) {
+        dispatch({ type: "ADD_COMMAND", entry: { command: "COPY", timestamp: Date.now(), result: "Select entities first" } });
+        return;
+      }
+      if (!state.drawingState.isDrawing) {
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, previewPoint: pt } });
+        dispatch({ type: "ADD_COMMAND", entry: { command: "COPY", timestamp: Date.now(), result: "Base point set. Click destination." } });
+      } else if (state.drawingState.startPoint) {
+        pushUndo();
+        const dx = pt.x - state.drawingState.startPoint.x;
+        const dy = pt.y - state.drawingState.startPoint.y;
+        const selected = state.entities.filter(e => state.selectedEntityIds.includes(e.id));
+        const copies = copyEntities(selected, dx, dy);
+        dispatch({ type: "ADD_ENTITIES", entities: copies });
+        dispatch({ type: "ADD_COMMAND", entry: { command: "COPY", timestamp: Date.now(), result: `Copied ${copies.length} entities` } });
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, previewPoint: null } });
+      }
+      return;
+    }
+
+    if (tool === "offset") {
+      const tolerance = 8 / state.viewState.zoom;
+      if (!offsetEntityRef.current) {
+        // Step 1: Pick the entity to offset
+        for (let i = state.entities.length - 1; i >= 0; i--) {
+          const ent = state.entities[i];
+          if (!ent.visible || ent.locked) continue;
+          const layer = state.layers.find(l => l.id === ent.layerId);
+          if (layer && (!layer.visible || layer.locked)) continue;
+          if (hitTestEntity(ent, pt, tolerance)) {
+            offsetEntityRef.current = ent;
+            const distStr = prompt("Enter offset distance:");
+            if (!distStr || isNaN(parseFloat(distStr))) {
+              offsetEntityRef.current = null;
+              dispatch({ type: "ADD_COMMAND", entry: { command: "OFFSET", timestamp: Date.now(), result: "Invalid distance" } });
+              return;
+            }
+            offsetDistRef.current = Math.abs(parseFloat(distStr));
+            dispatch({ type: "ADD_COMMAND", entry: { command: "OFFSET", timestamp: Date.now(), result: `Distance: ${offsetDistRef.current}. Click side to offset.` } });
+            return;
+          }
+        }
+        dispatch({ type: "ADD_COMMAND", entry: { command: "OFFSET", timestamp: Date.now(), result: "Click an entity to offset" } });
+      } else {
+        // Step 2: Click the side to offset toward
+        const result = offsetEntity(offsetEntityRef.current, offsetDistRef.current!, pt);
+        if (result) {
+          pushUndo();
+          dispatch({ type: "ADD_ENTITY", entity: result });
+          dispatch({ type: "ADD_COMMAND", entry: { command: "OFFSET", timestamp: Date.now(), result: `Offset ${offsetEntityRef.current.type} by ${offsetDistRef.current}` } });
+        }
+        offsetEntityRef.current = null;
+        offsetDistRef.current = null;
+      }
+      return;
+    }
+
     if (tool === "move") {
       if (state.selectedEntityIds.length === 0) return;
       if (!state.drawingState.isDrawing) {
@@ -511,9 +596,12 @@ export default function CADCanvas() {
         if (e.key === "a") { e.preventDefault(); dispatch({ type: "SELECT_ENTITIES", ids: state.entities.filter(en => en.visible && !en.locked).map(en => en.id) }); return; }
         if (e.key === "s") { e.preventDefault(); return; }
       }
-      if (e.key === "Escape") { dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
+      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
       if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedEntityIds.length) { pushUndo(); dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds }); } return; }
       if (e.key === "T" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "trim" }); return; }
+      if (e.key === "E" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "extend" }); return; }
+      if (e.key === "C" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "copy" }); return; }
+      if (e.key === "o" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "offset" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
@@ -543,6 +631,9 @@ function getCursor(tool: string, panning: boolean): string {
     case "pan": return "grab";
     case "erase": return "crosshair";
     case "trim": return "crosshair";
+    case "extend": return "crosshair";
+    case "copy": return "crosshair";
+    case "offset": return "crosshair";
     case "text": return "text";
     default: return "crosshair";
   }

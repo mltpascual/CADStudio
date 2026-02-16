@@ -6,7 +6,8 @@ const shortcuts = [
     { key: "V", action: "Select" }, { key: "L", action: "Line" }, { key: "C", action: "Circle" },
     { key: "A", action: "Arc" }, { key: "R", action: "Rectangle" }, { key: "P", action: "Polyline" },
     { key: "E", action: "Ellipse" }, { key: "T", action: "Text" }, { key: "D", action: "Dimension" },
-    { key: "M", action: "Move" }, { key: "Shift+T", action: "Trim" }, { key: "X", action: "Erase" },
+    { key: "M", action: "Move" }, { key: "Shift+C", action: "Copy" }, { key: "Shift+T", action: "Trim" },
+    { key: "Shift+E", action: "Extend" }, { key: "O", action: "Offset" }, { key: "X", action: "Erase" },
   ]},
   { category: "Edit", items: [
     { key: "Ctrl+Z", action: "Undo" }, { key: "Ctrl+Y", action: "Redo" },
