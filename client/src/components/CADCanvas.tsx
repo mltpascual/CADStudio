@@ -13,7 +13,7 @@ import { measureDistance, measureArea, measureAngle, drawDistanceOverlay, drawAr
 import { getEntityBoundary, createHatchEntity, drawHatchPattern } from "@/lib/hatch-utils";
 import { createBlockDefinition, createBlockRefEntity, getBlockRefEntities, explodeBlockRef } from "@/lib/block-utils";
 import { createRectangularArray, createPolarArray, getEntitiesCentroid } from "@/lib/array-utils";
-import { drawSpline, drawSplinePreview, hitTestSpline, moveSpline } from "@/lib/spline-utils";
+import { drawSpline, drawSplinePreview, hitTestSpline, moveSpline, evaluateCatmullRom } from "@/lib/spline-utils";
 import { drawXLine, drawRay, moveXLine, moveRay } from "@/lib/xline-utils";
 import { drawPaperSheet, drawViewportFrame, drawTitleBlock, getPaperPixelSize, MM_TO_PX } from "@/lib/layout-utils";
 import type { BlockRefData, SplineData, XLineData, RayData } from "@/lib/cad-types";
@@ -46,6 +46,25 @@ export default function CADCanvas() {
   const activeGripRef = useRef<GripPoint | null>(null);
   const gripDragging = useRef(false);
   const gripOriginalEntity = useRef<CADEntity | null>(null);
+
+  // Polyline edit mode state
+  const [polyEditId, setPolyEditId] = useState<string | null>(null);
+  const [polyEditHoveredVertex, setPolyEditHoveredVertex] = useState<number | null>(null);
+  const [polyEditHoveredEdge, setPolyEditHoveredEdge] = useState<number | null>(null);
+  const polyEditDragging = useRef(false);
+  const polyEditDragIdx = useRef<number | null>(null);
+  const lastClickTime = useRef(0);
+  const lastClickEntityId = useRef<string | null>(null);
+
+  // Spline edit mode state
+  const [splineEditId, setSplineEditId] = useState<string | null>(null);
+  const [splineEditHoveredVertex, setSplineEditHoveredVertex] = useState<number | null>(null);
+  const [splineEditHoveredSegment, setSplineEditHoveredSegment] = useState<number | null>(null);
+  const splineEditDragging = useRef(false);
+  const splineEditDragIdx = useRef<number | null>(null);
+
+  // Snap indicator for vertex drag
+  const [vertexDragSnap, setVertexDragSnap] = useState<{ point: Point; type: string } | null>(null);
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => {
     const canvas = canvasRef.current;
@@ -308,6 +327,219 @@ export default function CADCanvas() {
       drawGrips(ctx, allGrips, worldToScreen, hoveredGripId, activeGripRef.current?.id ?? null);
     }
 
+    // Polyline edit mode rendering
+    if (polyEditId) {
+      const polyEnt = state.entities.find(e => e.id === polyEditId);
+      if (polyEnt && polyEnt.data.type === 'polyline') {
+        const pd = polyEnt.data as { type: 'polyline'; points: Point[]; closed: boolean };
+        const pts = pd.points;
+
+        // Draw highlighted polyline edges
+        ctx.save();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        const fp = worldToScreen(pts[0].x, pts[0].y);
+        ctx.moveTo(fp.x, fp.y);
+        for (let i = 1; i < pts.length; i++) {
+          const sp = worldToScreen(pts[i].x, pts[i].y);
+          ctx.lineTo(sp.x, sp.y);
+        }
+        if (pd.closed) ctx.closePath();
+        ctx.stroke();
+
+        // Highlight hovered edge (for inserting vertex)
+        if (polyEditHoveredEdge !== null && polyEditHoveredEdge < pts.length - 1 + (pd.closed ? 1 : 0)) {
+          const ei = polyEditHoveredEdge;
+          const ea = pts[ei];
+          const eb = pts[(ei + 1) % pts.length];
+          const sa = worldToScreen(ea.x, ea.y);
+          const sb = worldToScreen(eb.x, eb.y);
+          ctx.strokeStyle = '#22c55e';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(sa.x, sa.y);
+          ctx.lineTo(sb.x, sb.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Draw + icon at midpoint
+          const mx = (sa.x + sb.x) / 2, my = (sa.y + sb.y) / 2;
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath(); ctx.arc(mx, my, 7, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(mx - 3, my); ctx.lineTo(mx + 3, my); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(mx, my - 3); ctx.lineTo(mx, my + 3); ctx.stroke();
+        }
+
+        // Draw vertex handles
+        for (let i = 0; i < pts.length; i++) {
+          const sp = worldToScreen(pts[i].x, pts[i].y);
+          const isHovered = polyEditHoveredVertex === i;
+          const isDragging = polyEditDragging.current && polyEditDragIdx.current === i;
+          const sz = isDragging ? 7 : isHovered ? 6 : 5;
+
+          // Outer ring
+          ctx.fillStyle = isDragging ? '#ef4444' : isHovered ? '#fbbf24' : '#f59e0b';
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, sz, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, sz, 0, Math.PI * 2); ctx.stroke();
+
+          // Inner dot
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, 2, 0, Math.PI * 2); ctx.fill();
+
+          // Vertex index label
+          ctx.fillStyle = '#f59e0b';
+          ctx.font = "bold 9px 'Fira Code'";
+          ctx.textAlign = 'center';
+          ctx.fillText(`V${i}`, sp.x, sp.y - sz - 4);
+        }
+
+        // Edit mode label
+        ctx.fillStyle = '#f59e0b';
+        ctx.globalAlpha = 0.9;
+        ctx.font = "bold 11px 'Space Grotesk'";
+        ctx.textAlign = 'left';
+        ctx.fillText('POLYLINE EDIT MODE', 12, 20);
+        ctx.font = "10px 'Fira Code'";
+        ctx.globalAlpha = 0.6;
+        ctx.fillText('Drag vertex to move | Click edge to insert | Right-click vertex to delete | Esc to exit', 12, 34);
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'start';
+        ctx.restore();
+      }
+    }
+
+    // Spline edit mode rendering
+    if (splineEditId) {
+      const splineEnt = state.entities.find(e => e.id === splineEditId);
+      if (splineEnt && splineEnt.data.type === 'spline') {
+        const sd = splineEnt.data as SplineData;
+        const cps = sd.controlPoints;
+
+        ctx.save();
+
+        // Draw the spline curve highlighted
+        const curvePoints = evaluateCatmullRom(cps, sd.closed, Math.max(60, cps.length * 20));
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        for (let i = 0; i < curvePoints.length; i++) {
+          const sp = worldToScreen(curvePoints[i].x, curvePoints[i].y);
+          if (i === 0) ctx.moveTo(sp.x, sp.y);
+          else ctx.lineTo(sp.x, sp.y);
+        }
+        if (sd.closed) ctx.closePath();
+        ctx.stroke();
+
+        // Draw control polygon
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        for (let i = 0; i < cps.length; i++) {
+          const sp = worldToScreen(cps[i].x, cps[i].y);
+          if (i === 0) ctx.moveTo(sp.x, sp.y);
+          else ctx.lineTo(sp.x, sp.y);
+        }
+        if (sd.closed) ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Highlight hovered segment (for inserting control point)
+        if (splineEditHoveredSegment !== null) {
+          const si = splineEditHoveredSegment;
+          const segCount = sd.closed ? cps.length : cps.length - 1;
+          if (si < segCount) {
+            const ea = cps[si];
+            const eb = cps[(si + 1) % cps.length];
+            const sa = worldToScreen(ea.x, ea.y);
+            const sb = worldToScreen(eb.x, eb.y);
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(sa.x, sa.y);
+            ctx.lineTo(sb.x, sb.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Draw + icon at midpoint
+            const mx = (sa.x + sb.x) / 2, my = (sa.y + sb.y) / 2;
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath(); ctx.arc(mx, my, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(mx - 3, my); ctx.lineTo(mx + 3, my); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(mx, my - 3); ctx.lineTo(mx, my + 3); ctx.stroke();
+          }
+        }
+
+        // Draw control point handles (diamond shape)
+        for (let i = 0; i < cps.length; i++) {
+          const sp = worldToScreen(cps[i].x, cps[i].y);
+          const isHovered = splineEditHoveredVertex === i;
+          const isDragging = splineEditDragging.current && splineEditDragIdx.current === i;
+          const sz = isDragging ? 8 : isHovered ? 7 : 5;
+
+          // Diamond shape
+          ctx.fillStyle = isDragging ? '#ef4444' : isHovered ? '#c084fc' : '#a855f7';
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(sp.x, sp.y - sz);
+          ctx.lineTo(sp.x + sz, sp.y);
+          ctx.lineTo(sp.x, sp.y + sz);
+          ctx.lineTo(sp.x - sz, sp.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Inner dot
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, 1.5, 0, Math.PI * 2); ctx.fill();
+
+          // Control point index label
+          ctx.fillStyle = '#a855f7';
+          ctx.font = "bold 9px 'Fira Code'";
+          ctx.textAlign = 'center';
+          ctx.fillText(`CP${i}`, sp.x, sp.y - sz - 4);
+        }
+
+        // Edit mode label
+        ctx.fillStyle = '#a855f7';
+        ctx.globalAlpha = 0.9;
+        ctx.font = "bold 11px 'Space Grotesk'";
+        ctx.textAlign = 'left';
+        ctx.fillText('SPLINE EDIT MODE', 12, 20);
+        ctx.font = "10px 'Fira Code'";
+        ctx.globalAlpha = 0.6;
+        ctx.fillText('Drag CP to move | Click segment to insert | Right-click CP to delete | Esc to exit', 12, 34);
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'start';
+        ctx.restore();
+      }
+    }
+
+    // Vertex drag snap indicator
+    if (vertexDragSnap && (polyEditDragging.current || splineEditDragging.current)) {
+      const sp = worldToScreen(vertexDragSnap.point.x, vertexDragSnap.point.y);
+      ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2;
+      if (vertexDragSnap.type === 'endpoint' || vertexDragSnap.type === 'quadrant') {
+        ctx.strokeRect(sp.x - 6, sp.y - 6, 12, 12);
+      } else if (vertexDragSnap.type === 'midpoint') {
+        ctx.beginPath(); ctx.moveTo(sp.x, sp.y - 7); ctx.lineTo(sp.x + 7, sp.y + 5); ctx.lineTo(sp.x - 7, sp.y + 5); ctx.closePath(); ctx.stroke();
+      } else if (vertexDragSnap.type === 'center') {
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, 6, 0, Math.PI * 2); ctx.stroke();
+      } else if (vertexDragSnap.type === 'grid') {
+        ctx.fillStyle = '#10b98180'; ctx.fillRect(sp.x - 3, sp.y - 3, 6, 6);
+      } else {
+        ctx.beginPath(); ctx.moveTo(sp.x - 6, sp.y - 6); ctx.lineTo(sp.x + 6, sp.y + 6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sp.x + 6, sp.y - 6); ctx.lineTo(sp.x - 6, sp.y + 6); ctx.stroke();
+      }
+    }
+
     // Snap indicator
     if (snapPoint) {
       const sp = worldToScreen(snapPoint.point.x, snapPoint.point.y);
@@ -505,7 +737,7 @@ export default function CADCanvas() {
       ctx.textAlign = "left";
       ctx.fillText(`PAPER: ${activeLayout.name} (${activeLayout.paperSize} ${activeLayout.orientation})`, 12, 20);
     }
-  }, [state, mouseWorld, snapPoint, measureResult, worldToScreen]);
+  }, [state, mouseWorld, snapPoint, measureResult, worldToScreen, polyEditId, polyEditHoveredVertex, polyEditHoveredEdge, splineEditId, splineEditHoveredVertex, splineEditHoveredSegment, vertexDragSnap]);
 
   // Resize
   useEffect(() => {
@@ -582,9 +814,108 @@ export default function CADCanvas() {
     const pt = processPoint(raw);
     const tool = state.activeTool;
 
+    // Polyline edit mode — intercept all clicks
+    if (polyEditId) {
+      const polyEnt = state.entities.find(en => en.id === polyEditId);
+      if (polyEnt && polyEnt.data.type === 'polyline') {
+        const pd = polyEnt.data as { type: 'polyline'; points: Point[]; closed: boolean };
+        const pts = pd.points;
+        const canvasEl = canvasRef.current;
+        const r = canvasEl?.getBoundingClientRect();
+        const screenPt = r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
+
+        // Check if clicking on a vertex — start drag
+        const vertexHitRadius = 10;
+        for (let i = 0; i < pts.length; i++) {
+          const sp = worldToScreen(pts[i].x, pts[i].y);
+          const dx = screenPt.x - sp.x, dy = screenPt.y - sp.y;
+          if (Math.sqrt(dx * dx + dy * dy) <= vertexHitRadius) {
+            pushUndo();
+            polyEditDragging.current = true;
+            polyEditDragIdx.current = i;
+            return;
+          }
+        }
+
+        // Check if clicking on an edge — insert vertex at midpoint
+        const edgeCount = pd.closed ? pts.length : pts.length - 1;
+        for (let i = 0; i < edgeCount; i++) {
+          const a = pts[i], b = pts[(i + 1) % pts.length];
+          const sa = worldToScreen(a.x, a.y), sb = worldToScreen(b.x, b.y);
+          const edgeDist = distToSegScreen(screenPt, sa, sb);
+          if (edgeDist < 8) {
+            pushUndo();
+            const mid: Point = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            const newPts = [...pts];
+            newPts.splice(i + 1, 0, mid);
+            dispatch({ type: 'UPDATE_ENTITY', id: polyEditId, updates: { data: { ...pd, points: newPts } } });
+            dispatch({ type: 'ADD_COMMAND', entry: { command: 'PEDIT', timestamp: Date.now(), result: `Inserted vertex at V${i + 1}` } });
+            return;
+          }
+        }
+
+        // Clicked outside polyline — exit edit mode
+        setPolyEditId(null);
+        setPolyEditHoveredVertex(null);
+        setPolyEditHoveredEdge(null);
+        setVertexDragSnap(null);
+        dispatch({ type: 'ADD_COMMAND', entry: { command: 'PEDIT', timestamp: Date.now(), result: 'Exited polyline edit mode' } });
+      }
+      return;
+    }
+
+    // Spline edit mode — intercept all clicks
+    if (splineEditId) {
+      const splineEnt = state.entities.find(en => en.id === splineEditId);
+      if (splineEnt && splineEnt.data.type === 'spline') {
+        const sd = splineEnt.data as SplineData;
+        const cps = sd.controlPoints;
+        const canvasEl = canvasRef.current;
+        const r = canvasEl?.getBoundingClientRect();
+        const screenPt = r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
+
+        // Check if clicking on a control point — start drag
+        for (let i = 0; i < cps.length; i++) {
+          const sp = worldToScreen(cps[i].x, cps[i].y);
+          const dx = screenPt.x - sp.x, dy = screenPt.y - sp.y;
+          if (Math.sqrt(dx * dx + dy * dy) <= 10) {
+            pushUndo();
+            splineEditDragging.current = true;
+            splineEditDragIdx.current = i;
+            return;
+          }
+        }
+
+        // Check if clicking on a control polygon segment — insert control point
+        const segCount = sd.closed ? cps.length : cps.length - 1;
+        for (let i = 0; i < segCount; i++) {
+          const a = cps[i], b = cps[(i + 1) % cps.length];
+          const sa = worldToScreen(a.x, a.y), sb = worldToScreen(b.x, b.y);
+          const segDist = distToSegScreen(screenPt, sa, sb);
+          if (segDist < 8) {
+            pushUndo();
+            const mid: Point = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            const newCps = [...cps];
+            newCps.splice(i + 1, 0, mid);
+            dispatch({ type: 'UPDATE_ENTITY', id: splineEditId, updates: { data: { ...sd, controlPoints: newCps } } });
+            dispatch({ type: 'ADD_COMMAND', entry: { command: 'SPEDIT', timestamp: Date.now(), result: `Inserted control point at CP${i + 1}` } });
+            return;
+          }
+        }
+
+        // Clicked outside spline — exit edit mode
+        setSplineEditId(null);
+        setSplineEditHoveredVertex(null);
+        setSplineEditHoveredSegment(null);
+        setVertexDragSnap(null);
+        dispatch({ type: 'ADD_COMMAND', entry: { command: 'SPEDIT', timestamp: Date.now(), result: 'Exited spline edit mode' } });
+      }
+      return;
+    }
+
     if (tool === "select") {
       // Check for grip drag start first
-      if (state.selectedEntityIds.length > 0) {
+      if (state.selectedEntityIds.length > 0 && !polyEditId) {
         const selectedEntities = state.entities.filter(en => state.selectedEntityIds.includes(en.id));
         const allGrips: GripPoint[] = [];
         for (const ent of selectedEntities) {
@@ -615,9 +946,36 @@ export default function CADCanvas() {
         if (hitTestEntity(ent, pt, tolerance)) { hit = ent; break; }
       }
       if (hit) {
+        // Double-click detection for polyline/spline edit mode
+        const now = Date.now();
+        if (hit.id === lastClickEntityId.current && now - lastClickTime.current < 400) {
+          if (hit.data.type === 'polyline') {
+            // Enter polyline edit mode
+            setPolyEditId(hit.id);
+            dispatch({ type: 'SELECT_ENTITIES', ids: [hit.id] });
+            dispatch({ type: 'ADD_COMMAND', entry: { command: 'PEDIT', timestamp: Date.now(), result: `Entered polyline edit mode (${(hit.data as any).points.length} vertices)` } });
+            lastClickTime.current = 0;
+            lastClickEntityId.current = null;
+            return;
+          }
+          if (hit.data.type === 'spline') {
+            // Enter spline edit mode
+            setSplineEditId(hit.id);
+            dispatch({ type: 'SELECT_ENTITIES', ids: [hit.id] });
+            dispatch({ type: 'ADD_COMMAND', entry: { command: 'SPEDIT', timestamp: Date.now(), result: `Entered spline edit mode (${(hit.data as SplineData).controlPoints.length} control points)` } });
+            lastClickTime.current = 0;
+            lastClickEntityId.current = null;
+            return;
+          }
+        }
+        lastClickTime.current = now;
+        lastClickEntityId.current = hit.id;
+
         if (e.shiftKey) dispatch({ type: "TOGGLE_SELECT", id: hit.id });
         else dispatch({ type: "SELECT_ENTITIES", ids: [hit.id] });
       } else {
+        lastClickTime.current = 0;
+        lastClickEntityId.current = null;
         if (!e.shiftKey) dispatch({ type: "DESELECT_ALL" });
         selBoxStart.current = pt;
         selBoxEnd.current = pt;
@@ -1217,7 +1575,7 @@ export default function CADCanvas() {
       }
       return;
     }
-  }, [state, getWorldPoint, processPoint, createEntity, dispatch, pushUndo]);
+  }, [state, getWorldPoint, processPoint, createEntity, dispatch, pushUndo, polyEditId, splineEditId, worldToScreen]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isPanning.current) {
@@ -1231,6 +1589,128 @@ export default function CADCanvas() {
     if (rect) {
       setMouseScreen({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       if (!canvasRect || canvasRect.width !== rect.width || canvasRect.height !== rect.height) setCanvasRect(rect);
+    }
+
+    // Polyline edit mode dragging (with snap)
+    if (polyEditDragging.current && polyEditDragIdx.current !== null && polyEditId) {
+      const polyEnt = state.entities.find(en => en.id === polyEditId);
+      if (polyEnt && polyEnt.data.type === 'polyline') {
+        const pd = polyEnt.data as { type: 'polyline'; points: Point[]; closed: boolean };
+        const newPts = [...pd.points];
+        // Snap the dragged vertex to nearby entities/grid
+        const snap = findSnapPoint(pt, state.entities, state.snapSettings, state.gridSettings, 15 / state.viewState.zoom);
+        let snappedPt = pt;
+        if (snap) { setVertexDragSnap(snap); snappedPt = snap.point; }
+        else if (state.gridSettings.snapToGrid) { snappedPt = snapToGridPoint(pt, state.gridSettings); setVertexDragSnap({ point: snappedPt, type: 'grid' }); }
+        else { setVertexDragSnap(null); }
+        newPts[polyEditDragIdx.current] = snappedPt;
+        dispatch({ type: 'UPDATE_ENTITY', id: polyEditId, updates: { data: { ...pd, points: newPts } } });
+      }
+      return;
+    }
+
+    // Spline edit mode dragging (with snap)
+    if (splineEditDragging.current && splineEditDragIdx.current !== null && splineEditId) {
+      const splineEnt = state.entities.find(en => en.id === splineEditId);
+      if (splineEnt && splineEnt.data.type === 'spline') {
+        const sd = splineEnt.data as SplineData;
+        const newCps = [...sd.controlPoints];
+        // Snap the dragged control point
+        const snap = findSnapPoint(pt, state.entities, state.snapSettings, state.gridSettings, 15 / state.viewState.zoom);
+        let snappedPt = pt;
+        if (snap) { setVertexDragSnap(snap); snappedPt = snap.point; }
+        else if (state.gridSettings.snapToGrid) { snappedPt = snapToGridPoint(pt, state.gridSettings); setVertexDragSnap({ point: snappedPt, type: 'grid' }); }
+        else { setVertexDragSnap(null); }
+        newCps[splineEditDragIdx.current] = snappedPt;
+        dispatch({ type: 'UPDATE_ENTITY', id: splineEditId, updates: { data: { ...sd, controlPoints: newCps } } });
+      }
+      return;
+    }
+
+    // Polyline edit mode hover detection
+    if (polyEditId) {
+      const polyEnt = state.entities.find(en => en.id === polyEditId);
+      if (polyEnt && polyEnt.data.type === 'polyline') {
+        const pd = polyEnt.data as { type: 'polyline'; points: Point[]; closed: boolean };
+        const pts = pd.points;
+        const canvasEl = canvasRef.current;
+        const r = canvasEl?.getBoundingClientRect();
+        const screenPt = r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
+
+        // Check vertex hover
+        let foundVertex = false;
+        for (let i = 0; i < pts.length; i++) {
+          const sp = worldToScreen(pts[i].x, pts[i].y);
+          const dx = screenPt.x - sp.x, dy = screenPt.y - sp.y;
+          if (Math.sqrt(dx * dx + dy * dy) <= 10) {
+            setPolyEditHoveredVertex(i);
+            setPolyEditHoveredEdge(null);
+            foundVertex = true;
+            break;
+          }
+        }
+        if (!foundVertex) {
+          setPolyEditHoveredVertex(null);
+          // Check edge hover
+          const edgeCount = pd.closed ? pts.length : pts.length - 1;
+          let foundEdge = false;
+          for (let i = 0; i < edgeCount; i++) {
+            const a = pts[i], b = pts[(i + 1) % pts.length];
+            const sa = worldToScreen(a.x, a.y), sb = worldToScreen(b.x, b.y);
+            const edgeDist = distToSegScreen(screenPt, sa, sb);
+            if (edgeDist < 8) {
+              setPolyEditHoveredEdge(i);
+              foundEdge = true;
+              break;
+            }
+          }
+          if (!foundEdge) setPolyEditHoveredEdge(null);
+        }
+      }
+      return;
+    }
+
+    // Spline edit mode hover detection
+    if (splineEditId) {
+      const splineEnt = state.entities.find(en => en.id === splineEditId);
+      if (splineEnt && splineEnt.data.type === 'spline') {
+        const sd = splineEnt.data as SplineData;
+        const cps = sd.controlPoints;
+        const canvasEl = canvasRef.current;
+        const r = canvasEl?.getBoundingClientRect();
+        const screenPt = r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
+
+        // Check control point hover
+        let foundCP = false;
+        for (let i = 0; i < cps.length; i++) {
+          const sp = worldToScreen(cps[i].x, cps[i].y);
+          const dx = screenPt.x - sp.x, dy = screenPt.y - sp.y;
+          if (Math.sqrt(dx * dx + dy * dy) <= 10) {
+            setSplineEditHoveredVertex(i);
+            setSplineEditHoveredSegment(null);
+            foundCP = true;
+            break;
+          }
+        }
+        if (!foundCP) {
+          setSplineEditHoveredVertex(null);
+          // Check segment hover (control polygon segments)
+          const segCount = sd.closed ? cps.length : cps.length - 1;
+          let foundSeg = false;
+          for (let i = 0; i < segCount; i++) {
+            const a = cps[i], b = cps[(i + 1) % cps.length];
+            const sa = worldToScreen(a.x, a.y), sb = worldToScreen(b.x, b.y);
+            const segDist = distToSegScreen(screenPt, sa, sb);
+            if (segDist < 8) {
+              setSplineEditHoveredSegment(i);
+              foundSeg = true;
+              break;
+            }
+          }
+          if (!foundSeg) setSplineEditHoveredSegment(null);
+        }
+      }
+      return;
     }
 
     // Grip dragging
@@ -1261,10 +1741,24 @@ export default function CADCanvas() {
     if (selBoxStart.current) {
       selBoxEnd.current = pt;
     }
-  }, [state.drawingState.isDrawing, getWorldPoint, processPoint, dispatch, state.selectedEntityIds, state.entities, state.activeTool, worldToScreen, hoveredGripId]);
+  }, [state.drawingState.isDrawing, getWorldPoint, processPoint, dispatch, state.selectedEntityIds, state.entities, state.activeTool, worldToScreen, hoveredGripId, polyEditId, splineEditId, state.snapSettings, state.gridSettings, state.viewState.zoom]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (isPanning.current) { isPanning.current = false; return; }
+    // Finish polyline edit vertex drag
+    if (polyEditDragging.current) {
+      polyEditDragging.current = false;
+      polyEditDragIdx.current = null;
+      setVertexDragSnap(null);
+      return;
+    }
+    // Finish spline edit control point drag
+    if (splineEditDragging.current) {
+      splineEditDragging.current = false;
+      splineEditDragIdx.current = null;
+      setVertexDragSnap(null);
+      return;
+    }
     // Finish grip drag
     if (gripDragging.current) {
       gripDragging.current = false;
@@ -1298,6 +1792,67 @@ export default function CADCanvas() {
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+
+    // Polyline edit mode: right-click to delete vertex
+    if (polyEditId) {
+      const polyEnt = state.entities.find(en => en.id === polyEditId);
+      if (polyEnt && polyEnt.data.type === 'polyline') {
+        const pd = polyEnt.data as { type: 'polyline'; points: Point[]; closed: boolean };
+        const pts = pd.points;
+        const canvasEl = canvasRef.current;
+        const r = canvasEl?.getBoundingClientRect();
+        const screenPt = r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
+
+        for (let i = 0; i < pts.length; i++) {
+          const sp = worldToScreen(pts[i].x, pts[i].y);
+          const dx = screenPt.x - sp.x, dy = screenPt.y - sp.y;
+          if (Math.sqrt(dx * dx + dy * dy) <= 10) {
+            if (pts.length > 2) {
+              pushUndo();
+              const newPts = pts.filter((_, idx) => idx !== i);
+              dispatch({ type: 'UPDATE_ENTITY', id: polyEditId, updates: { data: { ...pd, points: newPts } } });
+              dispatch({ type: 'ADD_COMMAND', entry: { command: 'PEDIT', timestamp: Date.now(), result: `Deleted vertex V${i}` } });
+              setPolyEditHoveredVertex(null);
+            } else {
+              dispatch({ type: 'ADD_COMMAND', entry: { command: 'PEDIT', timestamp: Date.now(), result: 'Cannot delete: polyline must have at least 2 vertices' } });
+            }
+            return;
+          }
+        }
+      }
+      return;
+    }
+
+    // Spline edit mode: right-click to delete control point
+    if (splineEditId) {
+      const splineEnt = state.entities.find(en => en.id === splineEditId);
+      if (splineEnt && splineEnt.data.type === 'spline') {
+        const sd = splineEnt.data as SplineData;
+        const cps = sd.controlPoints;
+        const canvasEl = canvasRef.current;
+        const r = canvasEl?.getBoundingClientRect();
+        const screenPt = r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
+
+        for (let i = 0; i < cps.length; i++) {
+          const sp = worldToScreen(cps[i].x, cps[i].y);
+          const dx = screenPt.x - sp.x, dy = screenPt.y - sp.y;
+          if (Math.sqrt(dx * dx + dy * dy) <= 10) {
+            if (cps.length > 2) {
+              pushUndo();
+              const newCps = cps.filter((_, idx) => idx !== i);
+              dispatch({ type: 'UPDATE_ENTITY', id: splineEditId, updates: { data: { ...sd, controlPoints: newCps } } });
+              dispatch({ type: 'ADD_COMMAND', entry: { command: 'SPEDIT', timestamp: Date.now(), result: `Deleted control point CP${i}` } });
+              setSplineEditHoveredVertex(null);
+            } else {
+              dispatch({ type: 'ADD_COMMAND', entry: { command: 'SPEDIT', timestamp: Date.now(), result: 'Cannot delete: spline must have at least 2 control points' } });
+            }
+            return;
+          }
+        }
+      }
+      return;
+    }
+
     if (state.activeTool === "hatch" && hatchBoundaryPts.current.length >= 3) {
       pushUndo();
       const hatchEnt = createHatchEntity(
@@ -1327,7 +1882,7 @@ export default function CADCanvas() {
     } else if (state.drawingState.isDrawing) {
       dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, currentPoints: [], previewPoint: null } });
     }
-  }, [state.activeTool, state.drawingState, createEntity, dispatch, pushUndo]);
+  }, [state.activeTool, state.drawingState, createEntity, dispatch, pushUndo, polyEditId, splineEditId, state.entities, worldToScreen]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1341,7 +1896,30 @@ export default function CADCanvas() {
         if (e.key === "p") { e.preventDefault(); /* PDF export handled by MenuBar */ return; }
         if (e.key === "i") { e.preventDefault(); /* DXF import handled by MenuBar */ return; }
       }
-      if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); hatchBoundaryPts.current = []; blockInsertId.current = null; splinePoints.current = []; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
+      if (e.key === "Escape") {
+        // Exit polyline/spline edit mode first
+        if (polyEditId) {
+          setPolyEditId(null);
+          setPolyEditHoveredVertex(null);
+          setPolyEditHoveredEdge(null);
+          polyEditDragging.current = false;
+          polyEditDragIdx.current = null;
+          setVertexDragSnap(null);
+          dispatch({ type: 'ADD_COMMAND', entry: { command: 'PEDIT', timestamp: Date.now(), result: 'Exited polyline edit mode' } });
+          return;
+        }
+        if (splineEditId) {
+          setSplineEditId(null);
+          setSplineEditHoveredVertex(null);
+          setSplineEditHoveredSegment(null);
+          splineEditDragging.current = false;
+          splineEditDragIdx.current = null;
+          setVertexDragSnap(null);
+          dispatch({ type: 'ADD_COMMAND', entry: { command: 'SPEDIT', timestamp: Date.now(), result: 'Exited spline edit mode' } });
+          return;
+        }
+        offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); hatchBoundaryPts.current = []; blockInsertId.current = null; splinePoints.current = []; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedEntityIds.length) { pushUndo(); dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds }); } return; }
       if (e.key === "T" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "trim" }); return; }
       if (e.key === "E" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "extend" }); return; }
@@ -1371,7 +1949,7 @@ export default function CADCanvas() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [state.entities, state.selectedEntityIds, dispatch, pushUndo]);
+  }, [state.entities, state.selectedEntityIds, dispatch, pushUndo, polyEditId, splineEditId]);
 
   const handleDynamicInputSubmit = useCallback((value: { distance?: number; angle?: number; x?: number; y?: number }) => {
     if (value.x !== undefined || value.y !== undefined) {
@@ -1402,7 +1980,7 @@ export default function CADCanvas() {
   }, [mouseWorld, state.drawingState, dispatch]);
 
   return (
-    <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: hoveredGripId ? 'move' : getCursor(state.activeTool, isPanning.current) }}>
+    <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: polyEditId ? (polyEditHoveredVertex !== null ? 'grab' : polyEditHoveredEdge !== null ? 'copy' : 'crosshair') : splineEditId ? (splineEditHoveredVertex !== null ? 'grab' : splineEditHoveredSegment !== null ? 'copy' : 'crosshair') : hoveredGripId ? 'move' : getCursor(state.activeTool, isPanning.current) }}>
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
@@ -1596,4 +2174,15 @@ function moveEntityData(data: EntityData, dx: number, dy: number): EntityData | 
     case "ray": return moveRay(data as RayData, dx, dy);
     default: return null;
   }
+}
+
+/** Distance from a screen point to a screen-space line segment */
+function distToSegScreen(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 0.001) return Math.sqrt((p.x - a.x) ** 2 + (p.y - a.y) ** 2);
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const px = a.x + t * dx, py = a.y + t * dy;
+  return Math.sqrt((p.x - px) ** 2 + (p.y - py) ** 2);
 }

@@ -46,8 +46,8 @@ export function getEntityGrips(entity: CADEntity): GripPoint[] {
     }
     case "arc": {
       grips.push({ id: `${eid}-center`, entityId: eid, point: d.center, type: "center", dataKey: "center" });
-      const sa = d.startAngle * Math.PI / 180;
-      const ea = d.endAngle * Math.PI / 180;
+      const sa = d.startAngle;
+      const ea = d.endAngle;
       grips.push({
         id: `${eid}-start`, entityId: eid,
         point: { x: d.center.x + d.radius * Math.cos(sa), y: d.center.y + d.radius * Math.sin(sa) },
@@ -245,12 +245,12 @@ export function applyGripMove(entity: CADEntity, grip: GripPoint, newWorldPoint:
     case "arc": {
       if (grip.dataKey === "center") return { ...d, center: np };
       if (grip.dataKey === "startAngle") {
-        const angle = Math.atan2(np.y - d.center.y, np.x - d.center.x) * 180 / Math.PI;
+        const angle = Math.atan2(np.y - d.center.y, np.x - d.center.x);
         const newRadius = Math.sqrt((np.x - d.center.x) ** 2 + (np.y - d.center.y) ** 2);
         return { ...d, startAngle: angle, radius: Math.max(1, newRadius) };
       }
       if (grip.dataKey === "endAngle") {
-        const angle = Math.atan2(np.y - d.center.y, np.x - d.center.x) * 180 / Math.PI;
+        const angle = Math.atan2(np.y - d.center.y, np.x - d.center.x);
         const newRadius = Math.sqrt((np.x - d.center.x) ** 2 + (np.y - d.center.y) ** 2);
         return { ...d, endAngle: angle, radius: Math.max(1, newRadius) };
       }
