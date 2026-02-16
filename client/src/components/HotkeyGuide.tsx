@@ -78,6 +78,16 @@ const groups: ShortcutGroup[] = [
       { key: "⇧I", label: "Insert Block", color: "#06b6d4" },
     ],
   },
+  {
+    title: "Settings",
+    items: [
+      { key: "F3", label: "Toggle OSNAP", color: "#ec4899" },
+      { key: "F7", label: "Toggle Grid", color: "#ec4899" },
+      { key: "F8", label: "Toggle Ortho", color: "#ec4899" },
+      { key: "F9", label: "Grid Snap", color: "#ec4899" },
+      { key: "F10", label: "Polar Track", color: "#ec4899" },
+    ],
+  },
 ];
 
 export default function HotkeyGuide() {

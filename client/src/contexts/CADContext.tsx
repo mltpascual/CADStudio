@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, type ReactNode, type Dispatch } from "react";
-import type { CADState, CADEntity, Layer, ToolType, LineStyle, ViewState, GridSettings, SnapSettings, CommandEntry, BlockDefinition, HatchPattern } from "@/lib/cad-types";
+import type { CADState, CADEntity, Layer, ToolType, LineStyle, ViewState, GridSettings, SnapSettings, CommandEntry, BlockDefinition, HatchPattern, PolarTrackingSettings } from "@/lib/cad-types";
 import { DEFAULT_LAYERS } from "@/lib/cad-types";
 
 type Action =
@@ -36,7 +36,9 @@ type Action =
   | { type: "REMOVE_BLOCK"; id: string }
   | { type: "SET_HATCH_PATTERN"; pattern: HatchPattern }
   | { type: "SET_HATCH_SCALE"; scale: number }
-  | { type: "SET_HATCH_ANGLE"; angle: number };
+  | { type: "SET_HATCH_ANGLE"; angle: number }
+  | { type: "SET_POLAR_TRACKING"; settings: Partial<PolarTrackingSettings> }
+  | { type: "TOGGLE_POLAR_TRACKING" };
 
 const initialState: CADState = {
   entities: [],
@@ -62,6 +64,7 @@ const initialState: CADState = {
   activeHatchPattern: "crosshatch" as HatchPattern,
   activeHatchScale: 1,
   activeHatchAngle: 0,
+  polarTracking: { enabled: false, increment: 45, additionalAngles: [], trackFromLastPoint: true },
 };
 
 function reducer(state: CADState, action: Action): CADState {
@@ -100,6 +103,8 @@ function reducer(state: CADState, action: Action): CADState {
     case "SET_HATCH_PATTERN": return { ...state, activeHatchPattern: action.pattern };
     case "SET_HATCH_SCALE": return { ...state, activeHatchScale: action.scale };
     case "SET_HATCH_ANGLE": return { ...state, activeHatchAngle: action.angle };
+    case "SET_POLAR_TRACKING": return { ...state, polarTracking: { ...state.polarTracking, ...action.settings } };
+    case "TOGGLE_POLAR_TRACKING": return { ...state, polarTracking: { ...state.polarTracking, enabled: !state.polarTracking.enabled } };
     default: return state;
   }
 }

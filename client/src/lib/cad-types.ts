@@ -83,6 +83,13 @@ export interface SnapSettings {
 
 export interface SnapResult { point: Point; type: string; entityId?: string; }
 
+export interface PolarTrackingSettings {
+  enabled: boolean;
+  increment: number; // degrees: 15, 30, 45, 90
+  additionalAngles: number[]; // custom angles
+  trackFromLastPoint: boolean;
+}
+
 export interface CommandEntry { command: string; timestamp: number; result?: string; }
 
 export interface DrawingState {
@@ -123,6 +130,7 @@ export interface CADState {
   activeHatchPattern: HatchPattern;
   activeHatchScale: number;
   activeHatchAngle: number;
+  polarTracking: PolarTrackingSettings;
 }
 
 export const ENTITY_COLORS = [

@@ -105,6 +105,18 @@ function GridSnapIcon() {
   );
 }
 
+function PolarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2">
+      <circle cx="7" cy="7" r="5" strokeDasharray="2 1.5" />
+      <line x1="7" y1="7" x2="12" y2="4" />
+      <line x1="7" y1="7" x2="11" y2="10" />
+      <line x1="7" y1="7" x2="7" y2="2" />
+      <circle cx="7" cy="7" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 const snapModes: SnapMode[] = [
   { key: "endpointSnap", label: "Endpoint", shortLabel: "END", icon: <EndpointIcon /> },
   { key: "midpointSnap", label: "Midpoint", shortLabel: "MID", icon: <MidpointIcon /> },
@@ -227,6 +239,69 @@ export default function SnapToolbar() {
           {state.orthoMode ? "Disable" : "Enable"} Ortho Mode (F8)
         </TooltipContent>
       </Tooltip>
+
+      <Separator orientation="vertical" className="h-4 mx-1 opacity-20" />
+
+      {/* Polar Tracking toggle */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className={`snap-toggle-btn ${state.polarTracking.enabled ? "active" : ""}`}
+            onClick={() => dispatch({ type: "TOGGLE_POLAR_TRACKING" })}
+          >
+            <PolarIcon />
+            <span className="snap-toggle-label">POLAR</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {state.polarTracking.enabled ? "Disable" : "Enable"} Polar Tracking (F10)
+        </TooltipContent>
+      </Tooltip>
+
+      {/* Polar increment selector */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            className={`snap-toggle-btn text-[10px] tabular-nums ${state.polarTracking.enabled ? "" : "disabled"}`}
+            disabled={!state.polarTracking.enabled}
+          >
+            {state.polarTracking.increment}°
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="center"
+          className="w-44 p-3 bg-card text-card-foreground border-border"
+        >
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Polar Increment</h4>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[5, 10, 15, 22.5, 30, 45, 60, 90].map((angle) => (
+              <button
+                key={angle}
+                className={`px-1.5 py-1 text-xs rounded border transition-colors ${
+                  state.polarTracking.increment === angle
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-input border-border text-foreground hover:bg-accent"
+                }`}
+                onClick={() => dispatch({ type: "SET_POLAR_TRACKING", settings: { increment: angle } })}
+              >
+                {angle}°
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 pt-2 border-t border-border">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={state.polarTracking.trackFromLastPoint}
+                onChange={(e) => dispatch({ type: "SET_POLAR_TRACKING", settings: { trackFromLastPoint: e.target.checked } })}
+                className="rounded border-border"
+              />
+              Track from last point
+            </label>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       <div className="flex-1" />
 

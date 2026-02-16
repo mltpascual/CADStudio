@@ -324,6 +324,59 @@ export default function CADCanvas() {
       ctx.restore();
     }
 
+    // Polar tracking guide lines
+    if (state.polarTracking.enabled && state.drawingState.isDrawing && state.drawingState.startPoint) {
+      const base = state.drawingState.startPoint;
+      const baseScreen = worldToScreen(base.x, base.y);
+      const inc = state.polarTracking.increment;
+      const trackAngles: number[] = [];
+      for (let a = 0; a < 360; a += inc) trackAngles.push(a);
+      for (const a of state.polarTracking.additionalAngles) {
+        if (!trackAngles.includes(a % 360)) trackAngles.push(a % 360);
+      }
+      const mPt = worldToScreen(mouseWorld.x, mouseWorld.y);
+      const dx = mouseWorld.x - base.x, dy = mouseWorld.y - base.y;
+      const mouseDist = Math.sqrt(dx * dx + dy * dy);
+      let mouseAngle = ((Math.atan2(dy, dx) * 180 / Math.PI % 360) + 360) % 360;
+      // Find if mouse is near a tracking angle
+      let activeAngle: number | null = null;
+      for (const ta of trackAngles) {
+        let diff = Math.abs(mouseAngle - ta);
+        if (diff > 180) diff = 360 - diff;
+        if (diff < 10) { activeAngle = ta; break; }
+      }
+      ctx.save();
+      // Draw all tracking angle lines faintly
+      for (const ta of trackAngles) {
+        const rad = ta * Math.PI / 180;
+        const isActive = ta === activeAngle;
+        ctx.strokeStyle = isActive ? "#22d3ee" : "#22d3ee15";
+        ctx.lineWidth = isActive ? 1 : 0.5;
+        ctx.setLineDash(isActive ? [8, 4] : [2, 6]);
+        const len = Math.max(w, h) * 2;
+        const ex = baseScreen.x + len * Math.cos(rad);
+        const ey = baseScreen.y + len * Math.sin(rad);
+        const ex2 = baseScreen.x - len * Math.cos(rad);
+        const ey2 = baseScreen.y - len * Math.sin(rad);
+        ctx.beginPath(); ctx.moveTo(ex2, ey2); ctx.lineTo(ex, ey); ctx.stroke();
+      }
+      // Draw angle tooltip near cursor when snapped
+      if (activeAngle !== null && mouseDist > 0.001) {
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#0e7490";
+        ctx.globalAlpha = 0.85;
+        const label = `${activeAngle}° (${mouseDist.toFixed(2)})`;
+        const tw = ctx.measureText(label).width;
+        ctx.fillRect(mPt.x + 14, mPt.y - 24, tw + 12, 20);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "#ecfeff";
+        ctx.font = "11px 'Fira Code'";
+        ctx.textAlign = "left";
+        ctx.fillText(label, mPt.x + 20, mPt.y - 10);
+      }
+      ctx.restore();
+    }
+
     // Crosshair
     const mScreen = worldToScreen(mouseWorld.x, mouseWorld.y);
     ctx.strokeStyle = cadCrosshair + "30"; ctx.lineWidth = 0.5;
@@ -360,8 +413,39 @@ export default function CADCanvas() {
     if (snap) { setSnapPoint(snap); pt = snap.point; }
     else { setSnapPoint(null); if (state.gridSettings.snapToGrid) pt = snapToGridPoint(pt, state.gridSettings); }
     if (state.orthoMode && state.drawingState.startPoint) pt = snapToAngle(state.drawingState.startPoint, pt);
+    // Polar tracking: snap to configured angle increments
+    if (state.polarTracking.enabled && !state.orthoMode && state.drawingState.startPoint) {
+      const base = state.drawingState.startPoint;
+      const dx = pt.x - base.x, dy = pt.y - base.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0.001) {
+        let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        const inc = state.polarTracking.increment;
+        // Build list of all tracking angles
+        const trackAngles: number[] = [];
+        for (let a = 0; a < 360; a += inc) trackAngles.push(a);
+        for (const a of state.polarTracking.additionalAngles) {
+          if (!trackAngles.includes(a % 360)) trackAngles.push(a % 360);
+        }
+        // Normalize angle to 0-360
+        let normAngle = ((angle % 360) + 360) % 360;
+        // Find nearest tracking angle
+        let nearestAngle = trackAngles[0];
+        let minDiff = 360;
+        for (const ta of trackAngles) {
+          let diff = Math.abs(normAngle - ta);
+          if (diff > 180) diff = 360 - diff;
+          if (diff < minDiff) { minDiff = diff; nearestAngle = ta; }
+        }
+        // Snap if within threshold (10 degrees)
+        if (minDiff < 10) {
+          const rad = nearestAngle * Math.PI / 180;
+          pt = { x: base.x + dist * Math.cos(rad), y: base.y + dist * Math.sin(rad) };
+        }
+      }
+    }
     return pt;
-  }, [state.entities, state.snapSettings, state.gridSettings, state.viewState.zoom, state.orthoMode, state.drawingState.startPoint]);
+  }, [state.entities, state.snapSettings, state.gridSettings, state.viewState.zoom, state.orthoMode, state.drawingState.startPoint, state.polarTracking]);
 
   const createEntity = useCallback((data: EntityData): CADEntity => ({
     id: generateId(), type: data.type, data, layerId: state.activeLayerId, color: state.activeColor,
@@ -1099,6 +1183,12 @@ export default function CADCanvas() {
       if (e.key === "s" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "spline" }); return; }
       if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "xline" }); return; }
       if (e.key === "G" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "ray" }); return; }
+      // Function keys
+      if (e.key === "F3") { e.preventDefault(); dispatch({ type: "SET_SNAP_SETTINGS", settings: { enabled: !state.snapSettings.enabled } }); return; }
+      if (e.key === "F7") { e.preventDefault(); dispatch({ type: "SET_GRID_SETTINGS", settings: { visible: !state.gridSettings.visible } }); return; }
+      if (e.key === "F8") { e.preventDefault(); dispatch({ type: "TOGGLE_ORTHO" }); return; }
+      if (e.key === "F9") { e.preventDefault(); dispatch({ type: "SET_GRID_SETTINGS", settings: { snapToGrid: !state.gridSettings.snapToGrid } }); return; }
+      if (e.key === "F10") { e.preventDefault(); dispatch({ type: "TOGGLE_POLAR_TRACKING" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
