@@ -72,6 +72,16 @@ const groups: ShortcutGroup[] = [
     ],
   },
   {
+    title: "File",
+    items: [
+      { key: "⌘N", label: "New Drawing", color: "#14b8a6" },
+      { key: "⌘O", label: "Open JSON", color: "#14b8a6" },
+      { key: "⌘S", label: "Save JSON", color: "#14b8a6" },
+      { key: "⌘I", label: "Import DXF", color: "#14b8a6" },
+      { key: "⌘P", label: "Export PDF", color: "#14b8a6" },
+    ],
+  },
+  {
     title: "Blocks",
     items: [
       { key: "⇧B", label: "Create Block", color: "#06b6d4" },

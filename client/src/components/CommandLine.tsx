@@ -70,7 +70,9 @@ export default function CommandLine() {
       if (found) { dispatch({ type: "SET_ACTIVE_LAYOUT", layoutId: found.id }); result = `Layout: ${found.name}`; }
       else result = `Layout "${name}" not found`;
     }
-    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, SPLINE, XLINE, RAY, TEXT, DIM, HATCH, BLOCK, INSERT, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, ARRAYRECT, ARRAYPOLAR, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT, MODEL, PAPER, LAYOUT <name>"; }
+    else if (t === "importdxf" || t === "dxfin") { result = "Use File > Import DXF... (Ctrl+I)"; }
+    else if (t === "exportpdf" || t === "pdf" || t === "print") { result = "Use File > Export PDF (Ctrl+P)"; }
+    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, SPLINE, XLINE, RAY, TEXT, DIM, HATCH, BLOCK, INSERT, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, ARRAYRECT, ARRAYPOLAR, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT, MODEL, PAPER, LAYOUT <name>, IMPORTDXF, PDF"; }
     else result = `Unknown: ${t}`;
     dispatch({ type: "ADD_COMMAND", entry: { command: cmd.trim(), timestamp: Date.now(), result } });
     setInput(""); setHistIdx(-1);

@@ -1,8 +1,10 @@
 import { useCAD, useCADActions } from "@/contexts/CADContext";
 import { exportToDXF, exportToSVG } from "@/lib/cad-utils";
+import { parseDXF } from "@/lib/dxf-import";
+import { exportModelSpaceToPdf, exportLayoutToPdf } from "@/lib/pdf-export";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuShortcut } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { FileDown, FileUp, Undo2, Redo2, Trash2, Copy, Grid3X3, Layers, Terminal, PanelRight, Sun, Moon } from "lucide-react";
+import { FileDown, FileUp, Undo2, Redo2, Trash2, Copy, Grid3X3, Layers, Terminal, PanelRight, Sun, Moon, Printer, FileInput } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import ShortcutsDialog from "./ShortcutsDialog";
 import { NamedViewsButton } from "./NamedViewsPanel";
@@ -45,6 +47,50 @@ export default function MenuBar() {
     inp.click();
   };
 
+  const handleImportDXF = () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".dxf";
+    inp.onchange = (ev: Event) => {
+      const file = (ev.target as HTMLInputElement).files?.[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        try {
+          const content = re.target?.result as string;
+          const result = parseDXF(content);
+          if (result.entities.length > 0) {
+            dispatch({ type: "LOAD_ENTITIES", entities: result.entities });
+            // Import layers if present
+            if (result.layers.length > 0) {
+              for (const layer of result.layers) {
+                dispatch({ type: "ADD_LAYER", layer });
+              }
+            }
+            toast.success(`Imported ${result.entities.length} entities from DXF`);
+          } else {
+            toast.warning("No supported entities found in DXF file");
+          }
+        } catch (err) {
+          console.error("DXF import error:", err);
+          toast.error("Failed to parse DXF file");
+        }
+      };
+      reader.readAsText(file);
+    };
+    inp.click();
+  };
+
+  const handleExportPDF = () => {
+    if (state.activeSpace === "paper" && state.activeLayoutId) {
+      const layout = state.layouts.find(l => l.id === state.activeLayoutId);
+      if (layout) {
+        exportLayoutToPdf(layout, state.entities, state.blocks, `${layout.name}.pdf`);
+        toast.success(`Exported layout "${layout.name}" as PDF`);
+        return;
+      }
+    }
+    exportModelSpaceToPdf(state.entities, state.blocks, "drawing.pdf");
+    toast.success("Exported model space as PDF");
+  };
+
   return (
     <div className="flex items-center h-9 px-2 gap-1 border-b select-none" style={{ background: "var(--cad-toolbar-bg)", borderColor: "var(--cad-panel-border)" }}>
       <div className="flex items-center gap-2 mr-2">
@@ -60,8 +106,11 @@ export default function MenuBar() {
           <DropdownMenuItem onClick={handleLoadJSON}><FileUp className="mr-2 h-3.5 w-3.5" /> Open...<DropdownMenuShortcut>Ctrl+O</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuItem onClick={handleSaveJSON}><FileDown className="mr-2 h-3.5 w-3.5" /> Save as JSON<DropdownMenuShortcut>Ctrl+S</DropdownMenuShortcut></DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleImportDXF}><FileInput className="mr-2 h-3.5 w-3.5" /> Import DXF...<DropdownMenuShortcut>Ctrl+I</DropdownMenuShortcut></DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleExportDXF}><FileDown className="mr-2 h-3.5 w-3.5" /> Export DXF</DropdownMenuItem>
           <DropdownMenuItem onClick={handleExportSVG}><FileDown className="mr-2 h-3.5 w-3.5" /> Export SVG</DropdownMenuItem>
+          <DropdownMenuItem onClick={handleExportPDF}><Printer className="mr-2 h-3.5 w-3.5" /> Export PDF<DropdownMenuShortcut>Ctrl+P</DropdownMenuShortcut></DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

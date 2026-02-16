@@ -1236,6 +1236,8 @@ export default function CADCanvas() {
         if (e.key === "y") { e.preventDefault(); dispatch({ type: "REDO" }); return; }
         if (e.key === "a") { e.preventDefault(); dispatch({ type: "SELECT_ENTITIES", ids: state.entities.filter(en => en.visible && !en.locked).map(en => en.id) }); return; }
         if (e.key === "s") { e.preventDefault(); return; }
+        if (e.key === "p") { e.preventDefault(); /* PDF export handled by MenuBar */ return; }
+        if (e.key === "i") { e.preventDefault(); /* DXF import handled by MenuBar */ return; }
       }
       if (e.key === "Escape") { offsetEntityRef.current = null; offsetDistRef.current = null; filletFirstRef.current = null; mirrorAxisStart.current = null; measurePoints.current = []; setMeasureResult(null); hatchBoundaryPts.current = []; blockInsertId.current = null; splinePoints.current = []; dispatch({ type: "DESELECT_ALL" }); dispatch({ type: "SET_TOOL", tool: "select" }); return; }
       if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedEntityIds.length) { pushUndo(); dispatch({ type: "REMOVE_ENTITIES", ids: state.selectedEntityIds }); } return; }

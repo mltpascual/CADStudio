@@ -20,6 +20,11 @@ const shortcuts = [
     { key: "Ctrl+A", action: "Select All" }, { key: "Delete", action: "Delete Selected" },
     { key: "Escape", action: "Cancel / Deselect" },
   ]},
+  { category: "File", items: [
+    { key: "Ctrl+N", action: "New Drawing" }, { key: "Ctrl+O", action: "Open JSON" },
+    { key: "Ctrl+S", action: "Save JSON" }, { key: "Ctrl+I", action: "Import DXF" },
+    { key: "Ctrl+P", action: "Export PDF" },
+  ]},
   { category: "Navigation", items: [
     { key: "Scroll", action: "Zoom In/Out" }, { key: "Middle Click + Drag", action: "Pan" },
     { key: "Right Click", action: "Finish / Cancel" },
