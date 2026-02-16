@@ -18,6 +18,7 @@ import { drawXLine, drawRay, moveXLine, moveRay } from "@/lib/xline-utils";
 import { drawPaperSheet, drawViewportFrame, drawTitleBlock, getPaperPixelSize, MM_TO_PX } from "@/lib/layout-utils";
 import type { BlockRefData, SplineData, XLineData, RayData } from "@/lib/cad-types";
 import DynamicInput from "@/components/DynamicInput";
+import { getEntityGrips, drawGrips, hitTestGrip, applyGripMove, type GripPoint } from "@/lib/grip-utils";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,6 +42,10 @@ export default function CADCanvas() {
   const hatchBoundaryPts = useRef<Point[]>([]);
   const blockInsertId = useRef<string | null>(null);
   const splinePoints = useRef<Point[]>([]);
+  const [hoveredGripId, setHoveredGripId] = useState<string | null>(null);
+  const activeGripRef = useRef<GripPoint | null>(null);
+  const gripDragging = useRef(false);
+  const gripOriginalEntity = useRef<CADEntity | null>(null);
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => {
     const canvas = canvasRef.current;
@@ -242,18 +247,65 @@ export default function CADCanvas() {
       ctx.restore();
     }
 
-    // Selection box
+    // Selection box — blue (window) or green (crossing)
     if (selBoxStart.current && selBoxEnd.current) {
       const s = worldToScreen(selBoxStart.current.x, selBoxStart.current.y);
       const e = worldToScreen(selBoxEnd.current.x, selBoxEnd.current.y);
       const crossing = selBoxEnd.current.x < selBoxStart.current.x;
-      ctx.strokeStyle = crossing ? "#22c55e" : "#3b82f6";
-      ctx.fillStyle = crossing ? "#22c55e10" : "#3b82f610";
-      ctx.lineWidth = 1;
-      ctx.setLineDash(crossing ? [4, 4] : []);
-      ctx.fillRect(s.x, s.y, e.x - s.x, e.y - s.y);
-      ctx.strokeRect(s.x, s.y, e.x - s.x, e.y - s.y);
+      const w = e.x - s.x, h = e.y - s.y;
+      const color = crossing ? "#22c55e" : "#3b82f6";
+
+      // Fill with gradient
+      const grad = ctx.createLinearGradient(s.x, s.y, s.x + w, s.y + h);
+      if (crossing) {
+        grad.addColorStop(0, "rgba(34, 197, 94, 0.12)");
+        grad.addColorStop(1, "rgba(34, 197, 94, 0.06)");
+      } else {
+        grad.addColorStop(0, "rgba(59, 130, 246, 0.12)");
+        grad.addColorStop(1, "rgba(59, 130, 246, 0.06)");
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(s.x, s.y, w, h);
+
+      // Border
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(crossing ? [6, 4] : []);
+      ctx.globalAlpha = 0.9;
+      ctx.strokeRect(s.x, s.y, w, h);
+      ctx.globalAlpha = 1;
       ctx.setLineDash([]);
+
+      // Corner markers
+      const corners = [
+        { x: s.x, y: s.y }, { x: s.x + w, y: s.y },
+        { x: s.x, y: s.y + h }, { x: s.x + w, y: s.y + h },
+      ];
+      ctx.fillStyle = color;
+      for (const c of corners) {
+        ctx.fillRect(c.x - 2, c.y - 2, 4, 4);
+      }
+
+      // Label
+      const label = crossing ? "Crossing" : "Window";
+      const lx = s.x + w / 2, ly = Math.min(s.y, s.y + h) - 8;
+      ctx.font = "10px 'Space Grotesk', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.7;
+      ctx.fillText(label, lx, ly);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "start";
+    }
+
+    // Grip points for selected entities
+    if (state.selectedEntityIds.length > 0 && (state.activeTool === 'select' || state.activeTool === 'move')) {
+      const selectedEntities = state.entities.filter(e => state.selectedEntityIds.includes(e.id));
+      const allGrips: GripPoint[] = [];
+      for (const ent of selectedEntities) {
+        allGrips.push(...getEntityGrips(ent));
+      }
+      drawGrips(ctx, allGrips, worldToScreen, hoveredGripId, activeGripRef.current?.id ?? null);
     }
 
     // Snap indicator
@@ -531,6 +583,28 @@ export default function CADCanvas() {
     const tool = state.activeTool;
 
     if (tool === "select") {
+      // Check for grip drag start first
+      if (state.selectedEntityIds.length > 0) {
+        const selectedEntities = state.entities.filter(en => state.selectedEntityIds.includes(en.id));
+        const allGrips: GripPoint[] = [];
+        for (const ent of selectedEntities) {
+          allGrips.push(...getEntityGrips(ent));
+        }
+        const canvasEl = canvasRef.current;
+        if (canvasEl) {
+          const r = canvasEl.getBoundingClientRect();
+          const screenPt = { x: e.clientX - r.left, y: e.clientY - r.top };
+          const hitGrip = hitTestGrip(allGrips, screenPt, worldToScreen);
+          if (hitGrip) {
+            pushUndo();
+            activeGripRef.current = hitGrip;
+            gripDragging.current = true;
+            gripOriginalEntity.current = selectedEntities.find(en => en.id === hitGrip.entityId) ?? null;
+            return;
+          }
+        }
+      }
+
       const tolerance = 8 / state.viewState.zoom;
       let hit: CADEntity | null = null;
       for (let i = state.entities.length - 1; i >= 0; i--) {
@@ -1159,6 +1233,27 @@ export default function CADCanvas() {
       if (!canvasRect || canvasRect.width !== rect.width || canvasRect.height !== rect.height) setCanvasRect(rect);
     }
 
+    // Grip dragging
+    if (gripDragging.current && activeGripRef.current && gripOriginalEntity.current) {
+      const newData = applyGripMove(gripOriginalEntity.current, activeGripRef.current, pt);
+      dispatch({ type: "UPDATE_ENTITY", id: gripOriginalEntity.current.id, updates: { data: newData, type: newData.type } });
+      return;
+    }
+
+    // Grip hover detection
+    if (state.selectedEntityIds.length > 0 && (state.activeTool === 'select' || state.activeTool === 'move')) {
+      const selectedEntities = state.entities.filter(en => state.selectedEntityIds.includes(en.id));
+      const allGrips: GripPoint[] = [];
+      for (const ent of selectedEntities) {
+        allGrips.push(...getEntityGrips(ent));
+      }
+      const screenPt = { x: e.clientX - (canvasRef.current?.getBoundingClientRect().left ?? 0), y: e.clientY - (canvasRef.current?.getBoundingClientRect().top ?? 0) };
+      const hitGrip = hitTestGrip(allGrips, screenPt, worldToScreen);
+      setHoveredGripId(hitGrip?.id ?? null);
+    } else {
+      if (hoveredGripId) setHoveredGripId(null);
+    }
+
     if (state.drawingState.isDrawing) {
       dispatch({ type: "SET_DRAWING_STATE", state: { previewPoint: pt } });
     }
@@ -1166,10 +1261,17 @@ export default function CADCanvas() {
     if (selBoxStart.current) {
       selBoxEnd.current = pt;
     }
-  }, [state.drawingState.isDrawing, getWorldPoint, processPoint, dispatch]);
+  }, [state.drawingState.isDrawing, getWorldPoint, processPoint, dispatch, state.selectedEntityIds, state.entities, state.activeTool, worldToScreen, hoveredGripId]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (isPanning.current) { isPanning.current = false; return; }
+    // Finish grip drag
+    if (gripDragging.current) {
+      gripDragging.current = false;
+      activeGripRef.current = null;
+      gripOriginalEntity.current = null;
+      return;
+    }
     if (selBoxStart.current && selBoxEnd.current) {
       const ids = entitiesInBox(state.entities, selBoxStart.current, selBoxEnd.current);
       if (ids.length > 0) {
@@ -1300,7 +1402,7 @@ export default function CADCanvas() {
   }, [mouseWorld, state.drawingState, dispatch]);
 
   return (
-    <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: getCursor(state.activeTool, isPanning.current) }}>
+    <div ref={containerRef} className="flex-1 relative overflow-hidden" style={{ cursor: hoveredGripId ? 'move' : getCursor(state.activeTool, isPanning.current) }}>
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
