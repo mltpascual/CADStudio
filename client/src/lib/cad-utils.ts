@@ -2,8 +2,9 @@
 // CAD Utils — Geometry, snapping, and export utilities
 // ============================================================
 
-import type { Point, CADEntity, SnapSettings, GridSettings, SnapResult, SplineData } from "./cad-types";
+import type { Point, CADEntity, SnapSettings, GridSettings, SnapResult, SplineData, XLineData, RayData } from "./cad-types";
 import { hitTestSpline, evaluateCatmullRom, getSplineEndpoints } from "./spline-utils";
+import { hitTestXLine, hitTestRay } from "./xline-utils";
 
 let _idCounter = 0;
 export function generateId(): string {
@@ -87,6 +88,8 @@ export function hitTestEntity(entity: CADEntity, point: Point, tolerance: number
     }
     case "dimension": return distToSeg(point, d.start, d.end) < tolerance * 2;
     case "spline": return hitTestSpline(d as SplineData, point, tolerance);
+    case "xline": return hitTestXLine(d as XLineData, point, tolerance);
+    case "ray": return hitTestRay(d as RayData, point, tolerance);
     default: return false;
   }
 }
@@ -168,6 +171,16 @@ function getSnapPoints(entity: CADEntity, snap: SnapSettings): SnapResult[] {
       const endpoints = getSplineEndpoints(sd);
       if (snap.endpointSnap) endpoints.forEach(p => results.push({ point: p, type: "endpoint", entityId: id }));
       if (snap.endpointSnap) sd.controlPoints.forEach(p => results.push({ point: p, type: "endpoint", entityId: id }));
+      break;
+    }
+    case "xline": {
+      const xd = d as XLineData;
+      if (snap.endpointSnap) results.push({ point: xd.basePoint, type: "endpoint", entityId: id });
+      break;
+    }
+    case "ray": {
+      const rd = d as RayData;
+      if (snap.endpointSnap) results.push({ point: rd.basePoint, type: "endpoint", entityId: id });
       break;
     }
   }

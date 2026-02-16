@@ -5,7 +5,8 @@ const shortcuts = [
   { category: "Tools", items: [
     { key: "V", action: "Select" }, { key: "L", action: "Line" }, { key: "C", action: "Circle" },
     { key: "A", action: "Arc" }, { key: "R", action: "Rectangle" }, { key: "P", action: "Polyline" },
-    { key: "E", action: "Ellipse" }, { key: "S", action: "Spline/Curve" }, { key: "T", action: "Text" }, { key: "D", action: "Dimension" },
+    { key: "E", action: "Ellipse" }, { key: "S", action: "Spline/Curve" }, { key: "G", action: "XLine (Construction)" }, { key: "Shift+G", action: "Ray" },
+    { key: "T", action: "Text" }, { key: "D", action: "Dimension" },
     { key: "M", action: "Move" }, { key: "Shift+C", action: "Copy" }, { key: "Shift+T", action: "Trim" },
     { key: "Shift+E", action: "Extend" }, { key: "O", action: "Offset" },
     { key: "Shift+R", action: "Rotate" }, { key: "Shift+S", action: "Scale" },

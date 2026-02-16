@@ -14,7 +14,8 @@ import { getEntityBoundary, createHatchEntity, drawHatchPattern } from "@/lib/ha
 import { createBlockDefinition, createBlockRefEntity, getBlockRefEntities, explodeBlockRef } from "@/lib/block-utils";
 import { createRectangularArray, createPolarArray, getEntitiesCentroid } from "@/lib/array-utils";
 import { drawSpline, drawSplinePreview, hitTestSpline, moveSpline } from "@/lib/spline-utils";
-import type { BlockRefData, SplineData } from "@/lib/cad-types";
+import { drawXLine, drawRay, moveXLine, moveRay } from "@/lib/xline-utils";
+import type { BlockRefData, SplineData, XLineData, RayData } from "@/lib/cad-types";
 
 export default function CADCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -208,6 +209,31 @@ export default function CADCanvas() {
         ctx.restore();
         drawSplinePreview(ctx, splinePoints.current, ds.previewPoint, false, state.activeColor, cx + panX, cy + panY, zoom);
         ctx.save();
+      } else if ((tool === "xline" || tool === "ray") && ds.startPoint) {
+        const s = worldToScreen(ds.startPoint.x, ds.startPoint.y);
+        const e = worldToScreen(ds.previewPoint.x, ds.previewPoint.y);
+        const dx = e.x - s.x, dy = e.y - s.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          const nx = dx / len, ny = dy / len;
+          const ext = Math.max(canvas.width, canvas.height) * 2;
+          ctx.setLineDash([8, 6]);
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          if (tool === "xline") {
+            ctx.moveTo(s.x - nx * ext, s.y - ny * ext);
+            ctx.lineTo(s.x + nx * ext, s.y + ny * ext);
+          } else {
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(s.x + nx * ext, s.y + ny * ext);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+          // Base point marker
+          ctx.fillStyle = state.activeColor;
+          ctx.beginPath(); ctx.arc(s.x, s.y, 3, 0, Math.PI * 2); ctx.fill();
+        }
       }
       ctx.restore();
     }
@@ -480,6 +506,38 @@ export default function CADCanvas() {
       } else {
         splinePoints.current = [...splinePoints.current, pt];
         dispatch({ type: "SET_DRAWING_STATE", state: { currentPoints: splinePoints.current, previewPoint: pt } });
+      }
+      return;
+    }
+
+    if (tool === "xline") {
+      if (!state.drawingState.isDrawing) {
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, previewPoint: pt } });
+      } else if (state.drawingState.startPoint) {
+        pushUndo();
+        const dir = { x: pt.x - state.drawingState.startPoint.x, y: pt.y - state.drawingState.startPoint.y };
+        const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+        if (len > 0.1) {
+          const ent = createEntity({ type: "xline", basePoint: state.drawingState.startPoint, direction: dir });
+          dispatch({ type: "ADD_ENTITY", entity: ent });
+        }
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, previewPoint: null } });
+      }
+      return;
+    }
+
+    if (tool === "ray") {
+      if (!state.drawingState.isDrawing) {
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: true, startPoint: pt, previewPoint: pt } });
+      } else if (state.drawingState.startPoint) {
+        pushUndo();
+        const dir = { x: pt.x - state.drawingState.startPoint.x, y: pt.y - state.drawingState.startPoint.y };
+        const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+        if (len > 0.1) {
+          const ent = createEntity({ type: "ray", basePoint: state.drawingState.startPoint, direction: dir });
+          dispatch({ type: "ADD_ENTITY", entity: ent });
+        }
+        dispatch({ type: "SET_DRAWING_STATE", state: { isDrawing: false, startPoint: null, previewPoint: null } });
       }
       return;
     }
@@ -1039,6 +1097,8 @@ export default function CADCanvas() {
       if (e.key === "A" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "array_rect" }); return; }
       if (e.key === "P" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "array_polar" }); return; }
       if (e.key === "s" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "spline" }); return; }
+      if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { dispatch({ type: "SET_TOOL", tool: "xline" }); return; }
+      if (e.key === "G" && e.shiftKey) { e.preventDefault(); dispatch({ type: "SET_TOOL", tool: "ray" }); return; }
       const keyMap: Record<string, any> = { v: "select", l: "line", c: "circle", a: "arc", r: "rectangle", p: "polyline", e: "ellipse", t: "text", d: "dimension", m: "move", x: "erase" };
       if (keyMap[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) { dispatch({ type: "SET_TOOL", tool: keyMap[e.key.toLowerCase()] }); }
     };
@@ -1081,6 +1141,8 @@ function getCursor(tool: string, panning: boolean): string {
     case "array_rect": return "crosshair";
     case "array_polar": return "crosshair";
     case "spline": return "crosshair";
+    case "xline": return "crosshair";
+    case "ray": return "crosshair";
     case "measure_distance": return "crosshair";
     case "measure_area": return "crosshair";
     case "measure_angle": return "crosshair";
@@ -1167,6 +1229,22 @@ function drawEntity(ctx: CanvasRenderingContext2D, entity: CADEntity, zoom: numb
       drawSpline(ctx, sd, entity.color, entity.lineWidth, entity.lineStyle, cx + panX, cy + panY, zoom, selected, selected);
       break;
     }
+    case "xline": {
+      const xd = entity.data as XLineData;
+      const canvasEl = ctx.canvas;
+      const cw = canvasEl.width / (window.devicePixelRatio || 1);
+      const ch = canvasEl.height / (window.devicePixelRatio || 1);
+      drawXLine(ctx, xd, selected ? "#3b82f6" : entity.color, entity.lineWidth, cx + panX, cy + panY, zoom, cw, ch);
+      break;
+    }
+    case "ray": {
+      const rd = entity.data as RayData;
+      const canvasEl2 = ctx.canvas;
+      const cw2 = canvasEl2.width / (window.devicePixelRatio || 1);
+      const ch2 = canvasEl2.height / (window.devicePixelRatio || 1);
+      drawRay(ctx, rd, selected ? "#3b82f6" : entity.color, entity.lineWidth, cx + panX, cy + panY, zoom, cw2, ch2);
+      break;
+    }
     case "blockref": {
       // Block references are rendered by expanding their child entities
       // The parent canvas loop handles this via getBlockRefEntities
@@ -1213,6 +1291,8 @@ function moveEntityData(data: EntityData, dx: number, dy: number): EntityData | 
     case "hatch": return { ...data, boundary: data.boundary.map(p => ({ x: p.x + dx, y: p.y + dy })) };
     case "blockref": return { ...data, insertPoint: { x: data.insertPoint.x + dx, y: data.insertPoint.y + dy } };
     case "spline": return moveSpline(data as SplineData, dx, dy);
+    case "xline": return moveXLine(data as XLineData, dx, dy);
+    case "ray": return moveRay(data as RayData, dx, dy);
     default: return null;
   }
 }

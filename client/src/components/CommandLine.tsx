@@ -19,6 +19,8 @@ const CMD: Record<string, ToolType> = {
   arrayrect: "array_rect", ar: "array_rect", rectarray: "array_rect",
   arraypolar: "array_polar", ap: "array_polar", polararray: "array_polar", array: "array_rect",
   spline: "spline", spl: "spline", sp: "spline", curve: "spline", bezier: "spline",
+  xline: "xline", xl: "xline", constructionline: "xline", cline: "xline",
+  ray: "ray",
   dist: "measure_distance", distance: "measure_distance", measuredist: "measure_distance",
   area: "measure_area", measurearea: "measure_area",
   angle: "measure_angle", measureangle: "measure_angle",
@@ -57,7 +59,7 @@ export default function CommandLine() {
         result = "Use the canvas to explode blocks (select block, type EXPLODE)";
       }
     }
-    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, SPLINE, TEXT, DIM, HATCH, BLOCK, INSERT, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, ARRAYRECT, ARRAYPOLAR, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT"; }
+    else if (t === "help" || t === "?") { result = "LINE, CIRCLE, ARC, RECT, POLYLINE, ELLIPSE, SPLINE, XLINE, RAY, TEXT, DIM, HATCH, BLOCK, INSERT, MOVE, COPY, MIRROR, TRIM, EXTEND, OFFSET, ROTATE, SCALE, FILLET, CHAMFER, ARRAYRECT, ARRAYPOLAR, DIST, AREA, ANGLE, ERASE, UNDO, REDO, ORTHO, GRID, SNAP, ZOOM <n>, ZOOMFIT"; }
     else result = `Unknown: ${t}`;
     dispatch({ type: "ADD_COMMAND", entry: { command: cmd.trim(), timestamp: Date.now(), result } });
     setInput(""); setHistIdx(-1);

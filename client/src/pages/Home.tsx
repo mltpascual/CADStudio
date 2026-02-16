@@ -7,6 +7,7 @@ import PropertiesPanel from "@/components/PropertiesPanel";
 import CommandLine from "@/components/CommandLine";
 import StatusBar from "@/components/StatusBar";
 import SnapToolbar from "@/components/SnapToolbar";
+import HotkeyGuide from "@/components/HotkeyGuide";
 
 function CADWorkspace() {
   const { state } = useCAD();
@@ -27,6 +28,7 @@ function CADWorkspace() {
       </div>
       <SnapToolbar />
       <StatusBar />
+      <HotkeyGuide />
     </div>
   );
 }
